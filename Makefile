@@ -4,6 +4,9 @@ DB_COPY ?= /tmp/argos-copy.db
 BACKUPS ?= backups
 
 TOOL = docker compose --profile db-web run --rm --no-deps
+SQLITE = docker compose --profile tools run --rm --no-deps -e SQL --entrypoint sh sqlite -c
+SQLITE_ARGS = -box -cmd "PRAGMA foreign_keys = ON" /data/argos.db
+export SQL
 NO_DB = test -f /data/argos.db || { echo 'there is no database yet: start the bot first' >&2; exit 1; }
 COPY_DB = import sqlite3, sys; src = sqlite3.connect('/data/argos.db'); dst = sqlite3.connect('/tmp/copy.db'); \
 	src.backup(dst); dst.execute('PRAGMA journal_mode = DELETE'); dst.close(); src.close(); \
@@ -28,7 +31,8 @@ logs:
 	docker compose logs -f argos
 
 db:
-	$(TOOL) --entrypoint sh sqlite-web -c "$(NO_DB); exec python3 -m sqlite3 /data/argos.db"
+	@$(SQLITE) 'test -f /data/argos.db || { echo "there is no database yet: start the bot first" >&2; exit 1; }; \
+		if [ -n "$$SQL" ]; then exec sqlite3 $(SQLITE_ARGS) "$$SQL"; else exec sqlite3 $(SQLITE_ARGS); fi'
 
 db-copy:
 	$(TOOL) -T --entrypoint sh sqlite-web -c "$(NO_DB); exec python3 -c \"$(COPY_DB)\"" > '$(DB_COPY).part'

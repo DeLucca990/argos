@@ -80,19 +80,42 @@ unless-stopped` handles.
 ### Looking inside the database
 
 The bot's image has no shell, and the database is in the volume rather than on the host, so
-both targets run in a one-off container of the sqlite-web image, which has Python's SQLite — on
-the volume, as the bot's user. They need nothing installed on the host and work whether the bot
-is running or not:
+these run in one-off containers on the volume, as the bot's user. They need nothing installed on
+the host and work whether the bot is running or not:
 
 ```sh
-make db                               # an SQL prompt on the live database: SELECT …, .tables
+make db                               # the sqlite3 shell on the live database
+make db SQL="SELECT merchant, total_cents FROM expenses WHERE payment_method = 'vale'"
 make db-copy                          # a consistent, single-file copy in /tmp/argos-copy.db, for a GUI or scp
 make db-copy DB_COPY=$HOME/argos.db   # somewhere else
 ```
 
-`make db` is Python's `python3 -m sqlite3`, which prints rows as tuples, and it can write: what
-is typed there changes the data the bot reads. Both refuse to run before the bot has created
-the database, rather than create an empty one.
+`make db` is the real `sqlite3`, from a small Alpine image the `tools` profile of `compose.yml`
+builds the first time and reuses after: `.tables`, `.schema expenses`, `.mode`, and rows drawn as
+a table.
+
+```
+sqlite> .tables
+attachments    categories     expense_items  extractions
+cards          digests        expenses       users
+sqlite> SELECT id, merchant, total_cents FROM expenses LIMIT 2;
+┌────┬────────────────────┬─────────────┐
+│ id │      merchant      │ total_cents │
+├────┼────────────────────┼─────────────┤
+│ 1  │ OXXO CARDOSO DINIZ │ 998         │
+│ 2  │ Uber               │ 1894        │
+└────┴────────────────────┴─────────────┘
+```
+
+It can write — what is typed there changes the data the bot reads — so foreign keys are on, as
+they are for the bot. `SQL=` takes quotes inside it as they are, since it reaches the container
+as a variable rather than as part of a command line. Both refuse to run before the bot has
+created the database, rather than create an empty one. Away from the clone, once the image is
+built, the same is
+
+```sh
+docker run --rm -it -u 65532:65532 -e HOME=/tmp -v argos-data:/data argos-sqlite sqlite3 -box /data/argos.db
+```
 
 #### In a browser
 
