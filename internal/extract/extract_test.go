@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/option"
+
+	"github.com/DeLucca990/argos-bot/internal/receipt"
 )
 
 var (
@@ -212,4 +214,35 @@ func TestPrepareImageAppliesEXIFOrientation(t *testing.T) {
 	if out, _, _ := prepareImage(plain, "image/jpeg"); !bytes.Equal(out, plain) {
 		t.Error("an upright small JPEG was re-encoded")
 	}
+}
+
+func TestCorrect(t *testing.T) {
+	srv, seen := fake(t, message("claude-opus-5-5", "end_turn", answer))
+	res, err := extractor(t, srv, "claude-opus-5-5").Correct(ctx, Correction{
+		Current: decodeRaw(t, answer), Text: "  foi 45,90 no crédito  ", Today: today,
+	})
+	if err != nil || res.Raw.Merchant != "Drogaria Boa Saúde" || res.Spend.USD == 0 {
+		t.Fatalf("%+v, %v", res, err)
+	}
+
+	req := (*seen)[0]
+	system := req.body["system"].([]any)[0].(map[string]any)["text"].(string)
+	content := req.body["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+	if !strings.Contains(system, "correction applied and everything else exactly as it was") || len(content) != 1 ||
+		!strings.Contains(text, `"merchant":"Drogaria Boa Saúde"`) || !strings.HasSuffix(text, "foi 45,90 no crédito") ||
+		!strings.Contains(text, "2026-10-20") {
+		t.Errorf("system %q\ntext %q", system, text)
+	}
+	if req.body["output_config"].(map[string]any)["format"] == nil {
+		t.Error("a correction must follow the same schema")
+	}
+}
+
+func decodeRaw(t *testing.T, s string) (r receipt.Raw) {
+	t.Helper()
+	if err := json.Unmarshal([]byte(s), &r); err != nil {
+		t.Fatal(err)
+	}
+	return r
 }

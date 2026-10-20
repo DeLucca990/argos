@@ -3,8 +3,10 @@
 A Telegram bot that keeps track of what you spend: send it a receipt — a photo, a PDF, or a line
 of text — and it extracts the purchase with Claude and stores it in SQLite.
 
-**Status: phase 3.** It reads receipts, records them as they arrive, and answers what was spent:
-by day, week and month, the latest ones, and a spreadsheet of any month.
+**Status: phase 4.** It reads receipts, records them as they arrive, takes corrections in plain
+words, and answers what was spent — by day, week and month, the latest ones, and a spreadsheet
+of any month. It backs itself up daily, reports its health, keeps to a daily budget if given one,
+and comes with an evaluation to choose its model by.
 
 ## Running it
 
@@ -56,8 +58,24 @@ schema version:
 
 Outside Docker, the same is `ARGOS_DATA_DIR=./data go run ./cmd/argos migrate`.
 
-To back it up while the bot runs, `make db-copy` (below): the database runs in WAL mode, and
-copying its files by hand while it writes can come out inconsistent.
+**Backups.** Once an hour the bot checks for today's backup and, when there is none, writes one
+with `VACUUM INTO` — a consistent copy even mid-write — to `/data/backups/argos-YYYY-MM-DD.db`,
+keeping the newest `ARGOS_BACKUP_KEEP` (14 unless set, 0 for none). They are in the same volume,
+so they cover a bad edit or a broken database, not a lost disk; to take them off the machine:
+
+```sh
+make db-backups                    # copies them into ./backups, owned by you
+make db-backups BACKUPS=/mnt/nas/argos
+```
+
+Copying the volume's files by hand while the bot writes can come out inconsistent, since the
+database runs in WAL mode; the backups and `make db-copy` (below) are the safe copies.
+
+**Health.** The container has a healthcheck: every 30 seconds the bot asks Telegram who it is and
+the database for a row, and `argos healthcheck` reports it unhealthy once a minute or two pass
+without both answering. `docker ps` shows it, and so can an Uptime Kuma Docker monitor. Docker
+does not restart a container for being unhealthy — it says so; a crash is what `restart:
+unless-stopped` handles.
 
 ### Looking inside the database
 
@@ -141,7 +159,27 @@ leitura: ≈ US$ 0,0400 · claude-opus-5-5
 
 It is saved as soon as it is read — there is no confirmation step. **Categoria** swaps the
 buttons for the categories; **Descartar** keeps the record but leaves it out of every total,
-and frees the receipt to be sent again, which is the way to fix a misread one for now.
+and frees the receipt to be sent again.
+
+**To correct one, reply to its card** in your own words — *foi 45,90*, *no crédito*, *era
+ontem*, *o nome é Padaria Real*, or all at once. Claude is shown the expense as recorded and the
+reply, and answers the same record with only that changed; the card is rewritten in place and
+the reply is answered with what moved:
+
+```
+✏️ Corrigido:
+• total: R$ 42,30 → R$ 45,90
+• pagamento: Débito → Crédito
+```
+
+That answer counts as the card too, so replying to it corrects again. A reply that asks for
+nothing applicable changes nothing and says so. The cost line on the card becomes the sum of
+the reading and every correction.
+
+**The daily budget.** With `ARGOS_DAILY_BUDGET_USD` set, a receipt or a correction that would
+start once today's model calls have reached it is answered with how much the day cost, and not
+read; commands keep working, and it lifts at midnight. It is checked before a call, so the call
+that crosses the line finishes. `/cost` shows how much of it is used.
 
 What the card warns about is checked in code, not by the model: a CNPJ or CPF whose check
 digits do not match (alphanumeric CNPJs included), an NFC-e access key that does not, items that
@@ -155,9 +193,13 @@ it. Once the first one is discarded, sending it again works.
 **How it is read.** One request to Claude per receipt, with the image or PDF and a JSON schema the
 answer must follow (structured outputs), so there is no parsing of prose. Images bigger than the
 model can see — 2576 px on the long edge — are scaled down first, and a phone photo sent as a file
-is turned upright by its EXIF orientation, which the model does not read on its own. HEIC is not
-accepted yet: send it as a photo, which Telegram converts. Amounts become integer cents in Go,
-never floats. Up to two receipts are read at once; the rest wait their turn.
+is turned upright by its EXIF orientation, which the model does not read on its own. Amounts
+become integer cents in Go, never floats. Up to two receipts are read at once; the rest wait
+their turn, and each photo of an album is a receipt of its own.
+
+**HEIC is not read**, and will not be soon: the API takes JPEG, PNG, GIF and WebP only, and Go
+has no HEIC decoder without cgo and libheif, which would end the static, any-architecture image.
+Sent as a photo rather than a file, an iPhone picture is converted to JPEG by Telegram itself.
 
 **What it costs** is on every card, and every call — answered, refused, failed or not a receipt
 at all — is a row in `extractions` with its tokens and estimated dollars, at list prices. A photo
@@ -202,6 +244,33 @@ description, where it came from and its id. Merchant names and descriptions were
 receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a planted
 `=HYPERLINK(…)` arrives as text instead of running as a formula when the file opens.
 
+## Choosing the model by your own receipts
+
+The model that reads best is a matter of your receipts, not of a benchmark, so the repo carries
+an evaluation to run on them. Put photos and PDFs in `testdata/receipts/` — ignored by git and
+by the Docker build, since they are yours — then:
+
+```sh
+make eval-init                       # writes a .json beside each with what the model read
+# correct every .json by hand: it is the answer key, and the model wrote it
+make eval                            # the configured model
+make eval MODEL=claude-sonnet-5-5    # or any other, and EFFORT=medium
+```
+
+```
+receipt   total  date  payment  category  merchant  cnpj  nfce  US$
+oxxo.jpg  ✓      ✓     ✗        ✓         ✓         ·     ·     0.0180
+
+oxxo.jpg: payment read "debito", expected "credito"
+
+claude-opus-5-5 at effort low: total 1/1 · date 1/1 · payment 0/1 · category 1/1 · merchant 1/1 — US$ 0.0180 for 1 receipt
+```
+
+The total is compared in cents, the merchant loosely — either name inside the other, ignoring
+case and punctuation — and the CNPJ and the NFC-e key only where the answer key has them (`·`
+otherwise). It runs on your machine with the `ANTHROPIC_API_KEY` in `.env`, and every receipt is
+a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
+
 ## Configuration
 
 | Variable | Default | |
@@ -211,6 +280,8 @@ receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a plan
 | `ANTHROPIC_API_KEY` | — | **required**: receipts are read by Claude (`ANTHROPIC_AUTH_TOKEN` also works) |
 | `ARGOS_MODEL` | `claude-opus-5-5` | the model that reads them |
 | `ARGOS_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max`: how much it thinks before answering |
+| `ARGOS_DAILY_BUDGET_USD` | — | the most a day of model calls may cost before reading pauses until midnight; `1.50` or `1,50` |
+| `ARGOS_BACKUP_KEEP` | `14` | how many daily backups to keep in `/data/backups`; `0` turns them off |
 | `ARGOS_DATA_DIR` | `/data` | where the `argos-data` volume is mounted; `make run`, outside Docker, sets `./data` |
 | `SQLITE_WEB_PASSWORD` | — | **required** by `make db-web` |
 | `SQLITE_WEB_ADDR` / `SQLITE_WEB_PORT` | `127.0.0.1` / `8081` | where `make db-web` listens on the host |
@@ -257,7 +328,8 @@ NFC-e access key, cannot be recorded twice unless the first record was discarded
 ## Project layout
 
 ```
-cmd/argos/           entrypoint: .env loading, the database, signal handling; argos migrate
+cmd/argos/           entrypoint: .env loading, the database, signal handling, backups; argos migrate and argos healthcheck
+cmd/eval/            make eval: reads your own receipts with a model and scores each field against what they say
 internal/dotenv/     reads a .env into the environment before the configuration is checked
 internal/receipt/    what a receipt is: amounts in cents, CNPJ/CPF/NFC-e checks, the warnings; imports nothing
 internal/extract/    Claude: the schema, the request, images made readable, what each call cost

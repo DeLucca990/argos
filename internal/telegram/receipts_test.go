@@ -24,10 +24,17 @@ var (
 )
 
 type fakeExtractor struct {
-	res   extract.Result
-	err   error
-	calls int
-	last  extract.Input
+	res         extract.Result
+	err         error
+	calls       int
+	last        extract.Input
+	fixed       extract.Result
+	corrections []extract.Correction
+}
+
+func (f *fakeExtractor) Correct(_ context.Context, c extract.Correction) (extract.Result, error) {
+	f.corrections = append(f.corrections, c)
+	return f.fixed, nil
 }
 
 func (f *fakeExtractor) Extract(_ context.Context, in extract.Input) (extract.Result, error) {

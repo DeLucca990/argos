@@ -111,4 +111,12 @@ CREATE TABLE extractions (
 
 CREATE INDEX extractions_by_time ON extractions (created_at);
 `},
+	{name: "0002_cards", sql: `
+CREATE TABLE cards (
+    chat_id    INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    expense_id INTEGER NOT NULL REFERENCES expenses (id),
+    PRIMARY KEY (chat_id, message_id)
+);
+`},
 }

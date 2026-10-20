@@ -37,6 +37,7 @@ var extensions = map[string]string{
 
 type extractor interface {
 	Extract(ctx context.Context, in extract.Input) (extract.Result, error)
+	Correct(ctx context.Context, c extract.Correction) (extract.Result, error)
 }
 
 type incoming struct {
@@ -77,7 +78,7 @@ func (b *Bot) onFile(ctx context.Context, msg *models.Message) {
 		return
 	}
 
-	b.process(ctx, msg, func(ctx context.Context) reply {
+	b.process(ctx, msg, "🔎 Lendo…", func(ctx context.Context) reply {
 		data, err := b.download(ctx, fileID)
 		if err != nil {
 			log.Printf("chat %d: downloading the file: %v", msg.Chat.ID, err)
@@ -95,14 +96,14 @@ func (b *Bot) onFile(ctx context.Context, msg *models.Message) {
 
 func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 	in := incoming{text: msg.Text, source: store.SourceText}
-	b.process(ctx, msg, func(ctx context.Context) reply { return b.read(ctx, userFrom(ctx), in) })
+	b.process(ctx, msg, "🔎 Lendo…", func(ctx context.Context) reply { return b.read(ctx, userFrom(ctx), in) })
 }
 
-func (b *Bot) process(ctx context.Context, msg *models.Message, work func(context.Context) reply) {
+func (b *Bot) process(ctx context.Context, msg *models.Message, label string, work func(context.Context) reply) {
 	ctx, cancel := context.WithTimeout(ctx, readTimeout)
 	defer cancel()
 
-	placeholder := b.replyTo(ctx, msg, "🔎 Lendo…")
+	placeholder := b.replyTo(ctx, msg, label)
 	stop := b.typing(ctx, msg.Chat.ID)
 	defer stop()
 
@@ -113,7 +114,12 @@ func (b *Bot) process(ctx context.Context, msg *models.Message, work func(contex
 		b.show(ctx, msg.Chat.ID, placeholder, reply{text: "⚠️ Demorou demais. Tente de novo."})
 		return
 	}
-	b.show(ctx, msg.Chat.ID, placeholder, work(ctx))
+	r := work(ctx)
+	if id := b.show(ctx, msg.Chat.ID, placeholder, r); id != 0 && r.expenseID != 0 {
+		if err := b.store.RememberCard(ctx, msg.Chat.ID, id, r.expenseID); err != nil {
+			log.Printf("expense %d: remembering its card: %v", r.expenseID, err)
+		}
+	}
 }
 
 func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
@@ -133,12 +139,12 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 		}
 	}
 
-	res, err := b.extractor.Extract(ctx, extract.Input{MIME: in.mime, Data: in.data, Text: in.text, Today: now})
-	record := store.Extraction{
-		UserID: user.ID, AttachmentID: att.ID, Model: nonEmpty(res.Model, b.cfg.Model), RawJSON: res.RawJSON,
-		Failed: err != nil, InputTokens: res.Spend.Input, OutputTokens: res.Spend.Output,
-		CacheReadTokens: res.Spend.CacheRead, CacheWriteTokens: res.Spend.CacheWrite, USD: res.Spend.USD,
+	if r, over := b.overBudget(ctx, now); over {
+		return r
 	}
+
+	res, err := b.extractor.Extract(ctx, extract.Input{MIME: in.mime, Data: in.data, Text: in.text, Today: now})
+	record := b.recordOf(user.ID, att.ID, res, err)
 	logRead(user, res, err)
 	if err != nil {
 		b.record(ctx, record)
@@ -179,7 +185,17 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 		log.Printf("expense %d: reading it back: %v", id, err)
 		return reply{text: dbErrorText}
 	}
-	return b.card(ctx, e, false)
+	out := b.card(ctx, e, false)
+	out.expenseID = id
+	return out
+}
+
+func (b *Bot) recordOf(userID, attachmentID int64, res extract.Result, err error) store.Extraction {
+	return store.Extraction{
+		UserID: userID, AttachmentID: attachmentID, Model: nonEmpty(res.Model, b.cfg.Model), RawJSON: res.RawJSON,
+		Failed: err != nil, InputTokens: res.Spend.Input, OutputTokens: res.Spend.Output,
+		CacheReadTokens: res.Spend.CacheRead, CacheWriteTokens: res.Spend.CacheWrite, USD: res.Spend.USD,
+	}
 }
 
 func (b *Bot) expenseFrom(r receipt.Receipt, userID int64, source store.Source, attachmentID int64) store.Expense {

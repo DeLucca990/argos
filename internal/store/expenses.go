@@ -118,14 +118,7 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 			return err
 		}
 
-		for i, item := range e.Items {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO expense_items (expense_id, position, description,
-				quantity, unit_cents, total_cents) VALUES (?, ?, ?, ?, ?, ?)`,
-				id, i, item.Description, item.Quantity, nullInt(item.UnitCents), item.TotalCents); err != nil {
-				return err
-			}
-		}
-		return nil
+		return insertItems(ctx, tx, id, e.Items)
 	})
 	return id, err
 }
@@ -219,6 +212,64 @@ func (s *Store) decide(ctx context.Context, userID, id int64, to Status, from ..
 		return err
 	})
 	return e, err
+}
+
+func insertItems(ctx context.Context, tx *sql.Tx, expenseID int64, items []Item) error {
+	for i, item := range items {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO expense_items (expense_id, position, description,
+			quantity, unit_cents, total_cents) VALUES (?, ?, ?, ?, ?, ?)`,
+			expenseID, i, item.Description, item.Quantity, nullInt(item.UnitCents), item.TotalCents); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) UpdateExpense(ctx context.Context, userID int64, e Expense) (Expense, error) {
+	if e.TotalCents <= 0 {
+		return Expense{}, fmt.Errorf("total must be positive, got %d cents", e.TotalCents)
+	}
+	if e.Currency == "" {
+		e.Currency = "BRL"
+	}
+	var updated Expense
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		if err := knownCategory(ctx, tx, e.Category); err != nil {
+			return err
+		}
+		if e.NFCeKey != "" {
+			existing, err := scanExpense(tx.QueryRowContext(ctx, `SELECT `+expenseColumns+` FROM expenses
+				WHERE nfce_key = ? AND status != 'discarded' AND id != ?`, e.NFCeKey, e.ID))
+			switch {
+			case err == nil:
+				return &DuplicateError{Existing: existing}
+			case !errors.Is(err, ErrNotFound):
+				return err
+			}
+		}
+
+		res, err := tx.ExecContext(ctx, `UPDATE expenses SET spent_on = ?, spent_time = ?, merchant = ?,
+			merchant_tax_id = ?, category = ?, payment_method = ?, total_cents = ?, currency = ?, description = ?,
+			nfce_key = ?, updated_at = ? WHERE id = ? AND user_id = ? AND status != 'discarded'`,
+			e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID, e.Category,
+			nullString(e.PaymentMethod), e.TotalCents, e.Currency, e.Description, nullString(e.NFCeKey),
+			s.timestamp(), e.ID, userID)
+		if err != nil {
+			return err
+		}
+		if err := changedOne(ctx, tx, res, userID, e.ID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM expense_items WHERE expense_id = ?`, e.ID); err != nil {
+			return err
+		}
+		if err := insertItems(ctx, tx, e.ID, e.Items); err != nil {
+			return err
+		}
+		updated, err = expenseWithItems(ctx, tx, e.ID)
+		return err
+	})
+	return updated, err
 }
 
 func (s *Store) SetCategory(ctx context.Context, userID, id int64, category string) (Expense, error) {

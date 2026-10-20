@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -76,7 +77,7 @@ func TestOpenMigratesOnceAndReopens(t *testing.T) {
 			t.Fatal(err)
 		}
 		var version int
-		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 1 {
+		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != len(migrations) {
 			t.Errorf("user_version = %d, %v", version, err)
 		}
 		cats, err := s.Categories(ctx)
@@ -109,23 +110,23 @@ func TestOpenRefusesANewerSchema(t *testing.T) {
 
 func TestOpenReportsWhatItApplied(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "argos.db")
-	for _, want := range []string{"0001_init", ""} {
+	for _, want := range []string{"0001_init,0002_cards", ""} {
 		s, err := Open(file)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := strings.Join(s.Applied(), ","); got != want || s.Version() != 1 {
-			t.Errorf("applied %q at version %d, want %q at 1", got, s.Version(), want)
+		if got := strings.Join(s.Applied(), ","); got != want || s.Version() != len(migrations) {
+			t.Errorf("applied %q at version %d, want %q at %d", got, s.Version(), want, len(migrations))
 		}
 		s.Close()
 	}
 
-	next := append(migrations[:len(migrations):len(migrations)], migration{name: "0002_notes", sql: `CREATE TABLE notes (body TEXT)`})
+	next := append(migrations[:len(migrations):len(migrations)], migration{name: fmt.Sprintf("%04d_notes", len(migrations)+1), sql: `CREATE TABLE notes (body TEXT)`})
 	s, err := openWith(file, next)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(s.Applied(), ","); got != "0002_notes" || s.Version() != 2 {
+	if got := strings.Join(s.Applied(), ","); got != fmt.Sprintf("%04d_notes", len(migrations)+1) || s.Version() != len(migrations)+1 {
 		t.Errorf("a later migration: applied %q at version %d", got, s.Version())
 	}
 	s.Close()

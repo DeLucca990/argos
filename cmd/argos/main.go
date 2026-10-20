@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	_ "time/tzdata"
 
 	"github.com/DeLucca990/argos-bot/internal/dotenv"
@@ -27,8 +28,13 @@ func main() {
 		runBot()
 	case "migrate":
 		migrate()
+	case "healthcheck":
+		if err := telegram.Healthy(); err != nil {
+			log.Fatal(err)
+		}
 	default:
-		log.Fatalf("unknown command %q: argos with no arguments runs the bot, argos migrate only migrates its database", command)
+		log.Fatalf("unknown command %q: argos runs the bot; argos migrate only migrates its database; "+
+			"argos healthcheck says whether a running bot is answering", command)
 	}
 }
 
@@ -47,6 +53,10 @@ func runBot() {
 	bot, err := telegram.New(cfg, st)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	if cfg.BackupKeep > 0 {
+		go backups(ctx, st, filepath.Join(cfg.DataDir, "backups"), cfg.BackupKeep)
 	}
 
 	bot.Run(ctx)
@@ -74,4 +84,23 @@ func openStore(dir string) *store.Store {
 	}
 	log.Printf("database %s: %s", file, state)
 	return st
+}
+
+func backups(ctx context.Context, st *store.Store, dir string, keep int) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		written, removed, err := st.DailyBackup(ctx, dir, keep, time.Now())
+		switch {
+		case err != nil:
+			log.Printf("backup: %v", err)
+		case written != "":
+			log.Printf("backup: wrote %s, keeping the newest %d, removed %d", written, keep, removed)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

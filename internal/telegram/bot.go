@@ -88,8 +88,13 @@ func (b *Bot) Run(ctx context.Context) {
 		log.Printf("telegram: could not publish the command list: %v", err)
 	}
 
-	log.Printf("telegram bot running for %d user(s), data in %s, reading receipts with %s at effort %s",
-		len(b.cfg.AllowedUsers), b.cfg.DataDir, b.cfg.Model, b.cfg.Effort)
+	budget := "no daily budget"
+	if b.cfg.DailyBudget > 0 {
+		budget = fmt.Sprintf("a daily budget of $%.2f", b.cfg.DailyBudget)
+	}
+	log.Printf("telegram bot running for %d user(s), data in %s, reading receipts with %s at effort %s, %s",
+		len(b.cfg.AllowedUsers), b.cfg.DataDir, b.cfg.Model, b.cfg.Effort, budget)
+	go b.heartbeat(ctx)
 	b.tg.Start(ctx)
 }
 
@@ -185,6 +190,10 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 		b.onCommand(ctx, msg, name, rest)
 		return
 	}
+	if id, ok := b.cardFor(ctx, msg); ok {
+		b.onCorrection(ctx, msg, id)
+		return
+	}
 	switch {
 	case len(msg.Photo) > 0 || msg.Document != nil:
 		b.onFile(ctx, msg)
@@ -220,9 +229,9 @@ func (b *Bot) replyTo(ctx context.Context, msg *models.Message, text string) int
 	return sent.ID
 }
 
-func (b *Bot) show(ctx context.Context, chatID int64, messageID int, r reply) {
+func (b *Bot) show(ctx context.Context, chatID int64, messageID int, r reply) int {
 	if messageID != 0 && b.edit(ctx, chatID, messageID, r) {
-		return
+		return messageID
 	}
 	disabled := true
 	params := &bot.SendMessageParams{
@@ -234,9 +243,12 @@ func (b *Bot) show(ctx context.Context, chatID int64, messageID int, r reply) {
 	if r.keyboard != nil {
 		params.ReplyMarkup = r.keyboard
 	}
-	if _, err := b.tg.SendMessage(ctx, params); err != nil {
+	sent, err := b.tg.SendMessage(ctx, params)
+	if err != nil {
 		log.Printf("telegram: sending to chat %d: %v", chatID, err)
+		return 0
 	}
+	return sent.ID
 }
 
 func (b *Bot) edit(ctx context.Context, chatID int64, messageID int, r reply) bool {

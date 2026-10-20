@@ -190,6 +190,7 @@ func (b *Bot) costText(ctx context.Context, now time.Time) (string, error) {
 	var s strings.Builder
 	s.WriteString("💲 <b>Leituras com o Claude</b> (estimativa a preço de tabela)\n\n")
 	today := startOfDay(now)
+	var spentToday float64
 	for _, w := range []struct {
 		label string
 		since time.Time
@@ -198,13 +199,20 @@ func (b *Bot) costText(ctx context.Context, now time.Time) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		if w.since.Equal(today) {
+			spentToday = usd
+		}
 		reads := "leituras"
 		if n == 1 {
 			reads = "leitura"
 		}
-		fmt.Fprintf(&s, "%s: US$ %s · %d %s\n", w.label, strings.Replace(strconv.FormatFloat(usd, 'f', 4, 64), ".", ",", 1), n, reads)
+		fmt.Fprintf(&s, "%s: US$ %s · %d %s\n", w.label, dollars(usd, 4), n, reads)
 	}
 	s.WriteString("\nModelo: " + html.EscapeString(b.cfg.Model) + ", effort " + html.EscapeString(b.cfg.Effort))
+	if b.cfg.DailyBudget > 0 {
+		fmt.Fprintf(&s, "\nTeto diário: US$ %s — %d%% usado hoje", dollars(b.cfg.DailyBudget, 2),
+			int(spentToday*100/b.cfg.DailyBudget))
+	}
 	return s.String(), nil
 }
 

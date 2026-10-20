@@ -29,8 +29,9 @@ var paymentLabels = map[string]string{
 }
 
 type reply struct {
-	text     string
-	keyboard *models.InlineKeyboardMarkup
+	text      string
+	keyboard  *models.InlineKeyboardMarkup
+	expenseID int64
 }
 
 type details struct {
@@ -53,6 +54,9 @@ func (b *Bot) details(ctx context.Context, e store.Expense) details {
 		return details{}
 	}
 	d := details{usd: x.USD, model: x.Model}
+	if total, err := b.store.ExpenseCost(ctx, e.ID); err == nil {
+		d.usd = total
+	}
 	var raw receipt.Raw
 	if json.Unmarshal([]byte(x.RawJSON), &raw) == nil {
 		if r, err := receipt.Parse(raw, x.CreatedAt.In(time.Local)); err == nil {
@@ -126,7 +130,7 @@ func (b *Bot) cardText(e store.Expense, d details) string {
 		s.WriteString("❌ <b>Descartado.</b>")
 	}
 	if d.model != "" {
-		usd := strings.Replace(strconv.FormatFloat(d.usd, 'f', 4, 64), ".", ",", 1)
+		usd := dollars(d.usd, 4)
 		s.WriteString("\n<i>leitura: ≈ US$ " + usd + " · " + html.EscapeString(d.model) + "</i>")
 	}
 	return s.String()

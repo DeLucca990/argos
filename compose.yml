@@ -9,6 +9,13 @@ services:
     volumes:
       - argos-data:/data
     read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "/argos", "healthcheck"]
+      interval: 1m
+      timeout: 10s
+      start_period: 1m
     restart: unless-stopped
 
   sqlite-web:

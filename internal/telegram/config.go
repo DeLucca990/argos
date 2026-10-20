@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -14,6 +15,8 @@ const (
 	DataDirEnv      = "ARGOS_DATA_DIR"
 	ModelEnv        = "ARGOS_MODEL"
 	EffortEnv       = "ARGOS_EFFORT"
+	DailyBudgetEnv  = "ARGOS_DAILY_BUDGET_USD"
+	BackupKeepEnv   = "ARGOS_BACKUP_KEEP"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
@@ -23,6 +26,7 @@ const (
 	defaultDataDir = "/data"
 	defaultModel   = "claude-opus-5-5"
 	defaultEffort  = "low"
+	defaultKeep    = 14
 )
 
 var efforts = []string{"low", "medium", "high", "xhigh", "max"}
@@ -33,6 +37,8 @@ type Config struct {
 	DataDir      string
 	Model        string
 	Effort       string
+	DailyBudget  float64
+	BackupKeep   int
 }
 
 func LoadConfig() (Config, error) {
@@ -72,6 +78,23 @@ func LoadConfig() (Config, error) {
 
 	if cfg.DataDir, err = DataDir(); err != nil {
 		problems = append(problems, err.Error())
+	}
+
+	if raw := env(DailyBudgetEnv); raw != "" {
+		v, err := strconv.ParseFloat(strings.Replace(raw, ",", ".", 1), 64)
+		if err != nil || !(v > 0) || math.IsInf(v, 0) {
+			problems = append(problems, fmt.Sprintf("%s=%q: must be a positive amount of dollars such as 1.50", DailyBudgetEnv, raw))
+		}
+		cfg.DailyBudget = v
+	}
+
+	cfg.BackupKeep = defaultKeep
+	if raw := env(BackupKeepEnv); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			problems = append(problems, fmt.Sprintf("%s=%q: must be how many daily backups to keep, 0 for none", BackupKeepEnv, raw))
+		}
+		cfg.BackupKeep = n
 	}
 
 	if len(problems) > 0 {

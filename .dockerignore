@@ -5,3 +5,5 @@ data
 docs
 *.md
 .DS_Store
+backups
+testdata
