@@ -1,7 +1,7 @@
 services:
   argos:
     build: .
-    image: argos-bot:latest
+    image: pedrodl/argos-bot:latest
     container_name: argos
     env_file: .env
     environment:

@@ -18,6 +18,47 @@ make logs
 It answers only private chats from the users in the allowlist. To update:
 `git pull && make up` — the database migrates itself on startup.
 
+### Without the source
+
+The image is on Docker Hub as [`pedrodl/argos-bot`](https://hub.docker.com/r/pedrodl/argos-bot),
+for amd64 and arm64. In an empty folder:
+
+```sh
+curl -fsSL -o .env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
+chmod 600 .env   # fill it in as above
+```
+
+and a `compose.yml`:
+
+```yaml
+services:
+  argos:
+    image: pedrodl/argos-bot:1
+    container_name: argos
+    env_file: .env
+    environment:
+      - TZ=America/Sao_Paulo
+    volumes:
+      - argos-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "/argos", "healthcheck"]
+      interval: 1m
+      timeout: 10s
+      start_period: 1m
+    restart: unless-stopped
+
+volumes:
+  argos-data:
+    name: argos-data
+```
+
+Then `docker compose up -d`, and `docker compose pull && docker compose up -d` to update. `:1`
+follows every release of 1.x; `:1.2.3` pins one, `:latest` is the newest release and `:edge`
+the newest commit on `main`.
+
 ## Using it
 
 **Send a receipt** — a photo, an image or PDF file, or text with a number in it (*almoço 35,90 no
@@ -96,6 +137,12 @@ make eval MODEL=claude-sonnet-5-5    # scores each field
 ```sh
 make test
 make run    # outside Docker, with the data in ./data
+```
+
+Every push to `main` publishes `pedrodl/argos-bot:edge`; a release is a tag:
+
+```sh
+git tag v1.2.3 && git push origin v1.2.3   # publishes 1.2.3, 1.2, 1 and latest
 ```
 
 ```
