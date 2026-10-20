@@ -1,0 +1,30 @@
+services:
+  argos:
+    build: .
+    image: argos-bot:latest
+    container_name: argos
+    env_file: .env
+    environment:
+      - TZ=America/Sao_Paulo
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./data:/data
+    read_only: true
+    restart: unless-stopped
+
+  sqlite-web:
+    image: ghcr.io/coleifer/sqlite-web:latest
+    container_name: argos-sqlite-web
+    profiles: [db-web]
+    command: ["argos.db", "--password", "--foreign-keys", "--no-browser"]
+    environment:
+      - SQLITE_WEB_PASSWORD=${SQLITE_WEB_PASSWORD:-}
+    user: "${PUID:-1000}:${PGID:-1000}"
+    volumes:
+      - ./data:/data
+    ports:
+      - "${SQLITE_WEB_ADDR:-127.0.0.1}:${SQLITE_WEB_PORT:-8081}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped

@@ -1,0 +1,7 @@
+.env
+.git
+bin
+data
+docs
+*.md
+.DS_Store
