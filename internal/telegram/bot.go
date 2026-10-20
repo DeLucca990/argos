@@ -5,26 +5,56 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/DeLucca990/argos-bot/internal/extract"
 	"github.com/DeLucca990/argos-bot/internal/store"
 )
 
+const fallbackCategory = "outros"
+
 type Bot struct {
-	cfg   Config
-	store *store.Store
-	tg    *bot.Bot
+	cfg       Config
+	store     *store.Store
+	extractor extractor
+	tg        *bot.Bot
+
+	cats    map[string]store.Category
+	catList []store.Category
+	slots   chan struct{}
+	now     func() time.Time
 }
 
 func New(cfg Config, st *store.Store) (*Bot, error) {
-	b := &Bot{cfg: cfg, store: st}
+	b := &Bot{cfg: cfg, store: st, slots: make(chan struct{}, maxConcurrency), now: time.Now}
+	if err := b.loadCategories(context.Background()); err != nil {
+		return nil, err
+	}
+
+	var cats []extract.Category
+	for _, c := range b.catList {
+		cats = append(cats, extract.Category{Slug: c.Slug, Label: c.Label})
+	}
+	x, err := extract.New(cfg.Model, cfg.Effort, cats)
+	if err != nil {
+		return nil, err
+	}
+	b.extractor = x
+
+	if err := os.MkdirAll(filepath.Join(cfg.DataDir, receiptsDir), 0o750); err != nil {
+		return nil, err
+	}
 
 	tg, err := bot.New(cfg.Token,
 		bot.WithMiddlewares(b.authorize, b.remember),
 		bot.WithDefaultHandler(b.handle),
-		bot.WithAllowedUpdates(bot.AllowedUpdates{"message"}),
+		bot.WithAllowedUpdates(bot.AllowedUpdates{"message", "callback_query"}),
 		bot.WithErrorsHandler(onError),
 	)
 	if err != nil {
@@ -32,6 +62,21 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 	}
 	b.tg = tg
 	return b, nil
+}
+
+func (b *Bot) loadCategories(ctx context.Context) error {
+	cats, err := b.store.Categories(ctx)
+	if err != nil {
+		return fmt.Errorf("reading the categories: %w", err)
+	}
+	b.catList, b.cats = cats, map[string]store.Category{}
+	for _, c := range cats {
+		b.cats[c.Slug] = c
+	}
+	if _, ok := b.cats[fallbackCategory]; !ok {
+		return fmt.Errorf("the categories have no %q, which a receipt that fits none of them goes to", fallbackCategory)
+	}
+	return nil
 }
 
 func (b *Bot) Run(ctx context.Context) {
@@ -43,7 +88,8 @@ func (b *Bot) Run(ctx context.Context) {
 		log.Printf("telegram: could not publish the command list: %v", err)
 	}
 
-	log.Printf("telegram bot running for %d user(s), data in %s", len(b.cfg.AllowedUsers), b.cfg.DataDir)
+	log.Printf("telegram bot running for %d user(s), data in %s, reading receipts with %s at effort %s",
+		len(b.cfg.AllowedUsers), b.cfg.DataDir, b.cfg.Model, b.cfg.Effort)
 	b.tg.Start(ctx)
 }
 
@@ -58,17 +104,26 @@ func onError(err error) {
 
 func (b *Bot) authorize(next bot.HandlerFunc) bot.HandlerFunc {
 	return func(ctx context.Context, tg *bot.Bot, u *models.Update) {
-		msg := u.Message
-		if msg == nil || msg.From == nil {
+		var from int64
+		var chat *models.Chat
+		switch {
+		case u.Message != nil && u.Message.From != nil:
+			from, chat = u.Message.From.ID, &u.Message.Chat
+		case u.CallbackQuery != nil:
+			from = u.CallbackQuery.From.ID
+			if m := u.CallbackQuery.Message.Message; m != nil {
+				chat = &m.Chat
+			}
+		default:
 			return
 		}
-		if chat := msg.Chat; chat.Type != models.ChatTypePrivate {
-			log.Printf("telegram: ignored a message in %s chat %d (%q): only private chats are answered",
+		if chat != nil && chat.Type != models.ChatTypePrivate {
+			log.Printf("telegram: ignored an update in %s chat %d (%q): only private chats are answered",
 				chat.Type, chat.ID, chat.Title)
 			return
 		}
-		if !b.cfg.AllowedUsers[msg.From.ID] {
-			log.Printf("telegram: ignored a message from user %d, who is not in %s", msg.From.ID, AllowedUsersEnv)
+		if !b.cfg.AllowedUsers[from] {
+			log.Printf("telegram: ignored an update from user %d, who is not in %s", from, AllowedUsersEnv)
 			return
 		}
 		next(ctx, tg, u)
@@ -77,7 +132,7 @@ func (b *Bot) authorize(next bot.HandlerFunc) bot.HandlerFunc {
 
 func (b *Bot) remember(next bot.HandlerFunc) bot.HandlerFunc {
 	return func(ctx context.Context, tg *bot.Bot, u *models.Update) {
-		from := u.Message.From
+		from := sender(u)
 		user, err := b.store.SaveUser(ctx, store.User{
 			TelegramID:   from.ID,
 			FirstName:    from.FirstName,
@@ -87,11 +142,22 @@ func (b *Bot) remember(next bot.HandlerFunc) bot.HandlerFunc {
 		})
 		if err != nil {
 			log.Printf("telegram user %d: saving their profile: %v", from.ID, err)
-			b.sendHTML(ctx, u.Message.Chat.ID, dbErrorText)
+			if u.CallbackQuery != nil {
+				b.answer(ctx, u.CallbackQuery, dbErrorText)
+			} else {
+				b.sendHTML(ctx, u.Message.Chat.ID, dbErrorText)
+			}
 			return
 		}
 		next(withUser(ctx, user), tg, u)
 	}
+}
+
+func sender(u *models.Update) *models.User {
+	if u.CallbackQuery != nil {
+		return &u.CallbackQuery.From
+	}
+	return u.Message.From
 }
 
 type userKey struct{}
@@ -108,18 +174,23 @@ func userFrom(ctx context.Context) store.User {
 const dbErrorText = "⚠️ Não consegui acessar o banco de dados."
 
 func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
-	chatID := u.Message.Chat.ID
-	switch name, _, _ := parseCommand(u.Message.Text); name {
-	case "categorias":
-		cats, err := b.store.Categories(ctx)
-		if err != nil {
-			log.Printf("chat %d: categories: %v", chatID, err)
-			b.sendHTML(ctx, chatID, dbErrorText)
-			return
-		}
-		b.sendHTML(ctx, chatID, categoriesText(cats))
+	if u.CallbackQuery != nil {
+		b.onCallback(ctx, u.CallbackQuery)
+		return
+	}
+
+	msg := u.Message
+	switch name, _, _ := parseCommand(msg.Text); {
+	case name == "categorias":
+		b.sendHTML(ctx, msg.Chat.ID, categoriesText(b.catList))
+	case name != "":
+		b.sendHTML(ctx, msg.Chat.ID, helpText())
+	case len(msg.Photo) > 0 || msg.Document != nil:
+		b.onFile(ctx, msg)
+	case hasDigit(msg.Text):
+		b.onText(ctx, msg)
 	default:
-		b.sendHTML(ctx, chatID, helpText())
+		b.sendHTML(ctx, msg.Chat.ID, helpText())
 	}
 }
 
@@ -133,4 +204,73 @@ func (b *Bot) sendHTML(ctx context.Context, chatID int64, text string) {
 	}); err != nil {
 		log.Printf("telegram: sending to chat %d: %v", chatID, err)
 	}
+}
+
+func (b *Bot) replyTo(ctx context.Context, msg *models.Message, text string) int {
+	sent, err := b.tg.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:          msg.Chat.ID,
+		Text:            text,
+		ReplyParameters: &models.ReplyParameters{MessageID: msg.ID, AllowSendingWithoutReply: true},
+	})
+	if err != nil {
+		log.Printf("telegram: sending to chat %d: %v", msg.Chat.ID, err)
+		return 0
+	}
+	return sent.ID
+}
+
+func (b *Bot) show(ctx context.Context, chatID int64, messageID int, r reply) {
+	if messageID != 0 && b.edit(ctx, chatID, messageID, r) {
+		return
+	}
+	disabled := true
+	params := &bot.SendMessageParams{
+		ChatID:             chatID,
+		Text:               r.text,
+		ParseMode:          models.ParseModeHTML,
+		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: &disabled},
+	}
+	if r.keyboard != nil {
+		params.ReplyMarkup = r.keyboard
+	}
+	if _, err := b.tg.SendMessage(ctx, params); err != nil {
+		log.Printf("telegram: sending to chat %d: %v", chatID, err)
+	}
+}
+
+func (b *Bot) edit(ctx context.Context, chatID int64, messageID int, r reply) bool {
+	disabled := true
+	params := &bot.EditMessageTextParams{
+		ChatID:             chatID,
+		MessageID:          messageID,
+		Text:               r.text,
+		ParseMode:          models.ParseModeHTML,
+		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: &disabled},
+	}
+	if r.keyboard != nil {
+		params.ReplyMarkup = r.keyboard
+	}
+	_, err := b.tg.EditMessageText(ctx, params)
+	if err != nil && !strings.Contains(err.Error(), "message is not modified") {
+		log.Printf("telegram: editing message %d in chat %d: %v", messageID, chatID, err)
+		return false
+	}
+	return true
+}
+
+func (b *Bot) typing(ctx context.Context, chatID int64) (stop func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		t := time.NewTicker(4 * time.Second)
+		defer t.Stop()
+		for {
+			b.tg.SendChatAction(ctx, &bot.SendChatActionParams{ChatID: chatID, Action: models.ChatActionTyping})
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
+	return cancel
 }

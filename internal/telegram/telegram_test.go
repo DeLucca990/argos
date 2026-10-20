@@ -39,7 +39,7 @@ func TestRememberSavesTheSender(t *testing.T) {
 
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
-	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv} {
+	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, ModelEnv, EffortEnv, anthropicKeyEnv, anthropicTokenEnv} {
 		t.Setenv(k, kv[k])
 	}
 }
@@ -50,6 +50,7 @@ func TestConfigReadsUsersAndDataDir(t *testing.T) {
 		TokenEnv:        "123:abc",
 		AllowedUsersEnv: "42, 7",
 		DataDirEnv:      dir,
+		anthropicKeyEnv: "sk-ant-test",
 	})
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -57,6 +58,9 @@ func TestConfigReadsUsersAndDataDir(t *testing.T) {
 	}
 	if !cfg.AllowedUsers[42] || !cfg.AllowedUsers[7] || len(cfg.AllowedUsers) != 2 {
 		t.Errorf("users: %v", cfg.AllowedUsers)
+	}
+	if cfg.Model != "claude-opus-5-5" || cfg.Effort != "low" {
+		t.Errorf("model %q at effort %q", cfg.Model, cfg.Effort)
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		t.Errorf("the data directory was not created: %v", err)
@@ -76,12 +80,12 @@ func TestConfigReportsEveryProblemAtOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(dir, 0o700) })
 
-	setEnv(t, map[string]string{DataDirEnv: dir})
+	setEnv(t, map[string]string{DataDirEnv: dir, EffortEnv: "huge"})
 	_, err := LoadConfig()
 	if err == nil {
 		t.Fatal("an empty environment was accepted")
 	}
-	for _, want := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv} {
+	for _, want := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, anthropicKeyEnv, EffortEnv} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error does not mention %s:\n%v", want, err)
 		}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -77,6 +78,13 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 	if e.Currency == "" {
 		e.Currency = "BRL"
 	}
+	switch e.Status {
+	case "":
+		e.Status = Pending
+	case Pending, Confirmed:
+	default:
+		return 0, fmt.Errorf("a new expense is pending or confirmed, not %s", e.Status)
+	}
 
 	var id int64
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
@@ -93,12 +101,16 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 		}
 
 		now := s.timestamp()
+		var confirmedAt any
+		if e.Status == Confirmed {
+			confirmedAt = now
+		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO expenses (user_id, status, spent_on, spent_time, merchant,
 			merchant_tax_id, category, payment_method, total_cents, currency, description, nfce_key, source,
-			attachment_id, created_at, updated_at) VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			e.UserID, e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID,
+			attachment_id, created_at, updated_at, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			e.UserID, e.Status, e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID,
 			e.Category, nullString(e.PaymentMethod), e.TotalCents, e.Currency, e.Description,
-			nullString(e.NFCeKey), e.Source, nullInt(e.AttachmentID), now, now)
+			nullString(e.NFCeKey), e.Source, nullInt(e.AttachmentID), now, now, confirmedAt)
 		if err != nil {
 			return err
 		}
@@ -116,6 +128,10 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 		return nil
 	})
 	return id, err
+}
+
+func (s *Store) Duplicate(ctx context.Context, e Expense) (Expense, bool, error) {
+	return duplicateOf(ctx, s.db, e)
 }
 
 func duplicateOf(ctx context.Context, q querier, e Expense) (Expense, bool, error) {
@@ -171,14 +187,14 @@ func expenseWithItems(ctx context.Context, q querier, id int64) (Expense, error)
 }
 
 func (s *Store) Confirm(ctx context.Context, userID, id int64) (Expense, error) {
-	return s.decide(ctx, userID, id, Confirmed)
+	return s.decide(ctx, userID, id, Confirmed, Pending)
 }
 
 func (s *Store) Discard(ctx context.Context, userID, id int64) (Expense, error) {
-	return s.decide(ctx, userID, id, Discarded)
+	return s.decide(ctx, userID, id, Discarded, Pending, Confirmed)
 }
 
-func (s *Store) decide(ctx context.Context, userID, id int64, to Status) (Expense, error) {
+func (s *Store) decide(ctx context.Context, userID, id int64, to Status, from ...Status) (Expense, error) {
 	var e Expense
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		now := s.timestamp()
@@ -186,8 +202,13 @@ func (s *Store) decide(ctx context.Context, userID, id int64, to Status) (Expens
 		if to == Confirmed {
 			confirmedAt = now
 		}
-		res, err := tx.ExecContext(ctx, `UPDATE expenses SET status = ?, updated_at = ?, confirmed_at = ?
-			WHERE id = ? AND user_id = ? AND status = 'pending'`, to, now, confirmedAt, id, userID)
+		args := []any{to, now, confirmedAt, id, userID}
+		for _, f := range from {
+			args = append(args, f)
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE expenses SET status = ?, updated_at = ?,
+			confirmed_at = COALESCE(?, confirmed_at) WHERE id = ? AND user_id = ? AND status IN (`+
+			strings.TrimSuffix(strings.Repeat("?, ", len(from)), ", ")+`)`, args...)
 		if err != nil {
 			return err
 		}

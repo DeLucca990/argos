@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -11,20 +12,44 @@ const (
 	TokenEnv        = "TELEGRAM_BOT_TOKEN"
 	AllowedUsersEnv = "TELEGRAM_ALLOWED_USER_IDS"
 	DataDirEnv      = "ARGOS_DATA_DIR"
+	ModelEnv        = "ARGOS_MODEL"
+	EffortEnv       = "ARGOS_EFFORT"
+
+	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
+	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
 )
 
-const defaultDataDir = "/data"
+const (
+	defaultDataDir = "/data"
+	defaultModel   = "claude-opus-5-5"
+	defaultEffort  = "low"
+)
+
+var efforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 type Config struct {
 	Token        string
 	AllowedUsers map[int64]bool
 	DataDir      string
+	Model        string
+	Effort       string
 }
 
 func LoadConfig() (Config, error) {
 	var problems []string
 
-	cfg := Config{Token: env(TokenEnv)}
+	cfg := Config{
+		Token:  env(TokenEnv),
+		Model:  envOr(ModelEnv, defaultModel),
+		Effort: strings.ToLower(envOr(EffortEnv, defaultEffort)),
+	}
+
+	if env(anthropicKeyEnv) == "" && env(anthropicTokenEnv) == "" {
+		problems = append(problems, fmt.Sprintf("%s is not set: the bot reads receipts with Claude", anthropicKeyEnv))
+	}
+	if !slices.Contains(efforts, cfg.Effort) {
+		problems = append(problems, fmt.Sprintf("%s=%q: must be one of %s", EffortEnv, cfg.Effort, strings.Join(efforts, ", ")))
+	}
 
 	if cfg.Token == "" {
 		problems = append(problems, fmt.Sprintf(
@@ -59,8 +84,9 @@ func DataDir() (string, error) {
 	dir := envOr(DataDirEnv, defaultDataDir)
 	if err := writable(dir); err != nil {
 		return dir, fmt.Errorf(
-			"%s=%s is not writable (%v): under Docker, the host's ./data must belong to the "+
-				"container's user — mkdir -p data && sudo chown 1000:1000 data, or PUID/PGID in .env",
+			"%s=%s is not writable (%v): under Docker it is the argos-data volume, which the image "+
+				"creates owned by its user; one created first by another container belongs to root — "+
+				"docker run --rm -v argos-data:/data alpine chown -R 65532:65532 /data",
 			DataDirEnv, dir, err)
 	}
 	return dir, nil

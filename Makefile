@@ -1,7 +1,12 @@
-.PHONY: build test run up down logs db db-copy db-check db-migrate db-web db-web-stop
+.PHONY: build test run up down logs db db-copy db-migrate db-web db-web-stop
 
-DB ?= data/argos.db
 DB_COPY ?= /tmp/argos-copy.db
+
+TOOL = docker compose --profile db-web run --rm --no-deps
+NO_DB = test -f /data/argos.db || { echo 'there is no database yet: start the bot first' >&2; exit 1; }
+COPY_DB = import sqlite3, sys; src = sqlite3.connect('/data/argos.db'); dst = sqlite3.connect('/tmp/copy.db'); \
+	src.backup(dst); dst.execute('PRAGMA journal_mode = DELETE'); dst.close(); src.close(); \
+	sys.stdout.buffer.write(open('/tmp/copy.db', 'rb').read())
 
 build:
 	go build -o bin/argos ./cmd/argos
@@ -21,18 +26,13 @@ down:
 logs:
 	docker compose logs -f argos
 
-db: db-check
-	sqlite3 -header -column -cmd "PRAGMA query_only = ON" $(DB)
+db:
+	$(TOOL) --entrypoint sh sqlite-web -c "$(NO_DB); exec python3 -m sqlite3 /data/argos.db"
 
-db-copy: db-check
-	sqlite3 -cmd "PRAGMA query_only = ON" $(DB) ".backup '$(DB_COPY)'"
-	sqlite3 $(DB_COPY) "PRAGMA journal_mode = DELETE" >/dev/null
-	@rm -f '$(DB_COPY)-wal' '$(DB_COPY)-shm'
+db-copy:
+	$(TOOL) -T --entrypoint sh sqlite-web -c "$(NO_DB); exec python3 -c \"$(COPY_DB)\"" > '$(DB_COPY).part'
+	@mv '$(DB_COPY).part' '$(DB_COPY)'
 	@echo "copied to $(DB_COPY)"
-
-db-check:
-	@command -v sqlite3 >/dev/null || { echo "sqlite3 is not installed (sudo apt install sqlite3)"; exit 1; }
-	@test -f $(DB) || { echo "$(DB) does not exist yet: start the bot first"; exit 1; }
 
 db-migrate:
 	docker compose run --rm --build argos migrate

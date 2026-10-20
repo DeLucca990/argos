@@ -6,9 +6,8 @@ services:
     env_file: .env
     environment:
       - TZ=America/Sao_Paulo
-    user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
-      - ./data:/data
+      - argos-data:/data
     read_only: true
     restart: unless-stopped
 
@@ -16,15 +15,20 @@ services:
     image: ghcr.io/coleifer/sqlite-web:latest
     container_name: argos-sqlite-web
     profiles: [db-web]
+    depends_on: [argos]
     command: ["argos.db", "--password", "--foreign-keys", "--no-browser"]
     environment:
       - SQLITE_WEB_PASSWORD=${SQLITE_WEB_PASSWORD:-}
-    user: "${PUID:-1000}:${PGID:-1000}"
+    user: "65532:65532"
     volumes:
-      - ./data:/data
+      - argos-data:/data
     ports:
       - "${SQLITE_WEB_ADDR:-127.0.0.1}:${SQLITE_WEB_PORT:-8081}:8080"
     read_only: true
     tmpfs:
       - /tmp
     restart: unless-stopped
+
+volumes:
+  argos-data:
+    name: argos-data

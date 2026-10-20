@@ -34,8 +34,11 @@ func parseCommand(text string) (name, target, rest string) {
 func helpText() string {
 	var b strings.Builder
 	b.WriteString("<b>Argos</b>\n\n")
-	b.WriteString("Você está autorizado. Ainda não leio comprovantes nem registro gastos — " +
-		"isso chega nas próximas versões.\n\n")
+	b.WriteString("Mande um comprovante e eu registro o gasto:\n" +
+		"• a foto de um cupom, nota ou comprovante\n" +
+		"• um PDF, como a nota fiscal ou o comprovante do banco\n" +
+		"• ou uma linha de texto: <i>almoço 35,90 no pix</i>\n\n" +
+		"Eu salvo na hora e mostro o que li. Se algo estiver errado, toque em Descartar e mande de novo.\n\n")
 	for _, c := range commands {
 		b.WriteString("/" + c.name + " — " + html.EscapeString(c.description) + "\n")
 	}

@@ -199,7 +199,7 @@ func TestExpenseIsRefusedWhenInvalid(t *testing.T) {
 	}
 }
 
-func TestConfirmAndDiscardOnlyFromPending(t *testing.T) {
+func TestConfirmAndDiscard(t *testing.T) {
 	s := open(t)
 	id := add(t, s, expense(me, "2026-10-18", 100, "mercado"))
 
@@ -213,8 +213,18 @@ func TestConfirmAndDiscardOnlyFromPending(t *testing.T) {
 	if _, err := s.Confirm(ctx, me, id); !errors.Is(err, ErrNotPending) {
 		t.Errorf("confirmed twice: %v", err)
 	}
+	if _, err := s.Discard(ctx, them, id); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another user discarded it: %v", err)
+	}
+	discarded, err := s.Discard(ctx, me, id)
+	if err != nil || discarded.Status != Discarded || !discarded.ConfirmedAt.Equal(e.ConfirmedAt) {
+		t.Errorf("discarding a saved expense: %+v, %v", discarded, err)
+	}
 	if _, err := s.Discard(ctx, me, id); !errors.Is(err, ErrNotPending) {
-		t.Errorf("a confirmed expense was discarded as if pending: %v", err)
+		t.Errorf("discarded twice: %v", err)
+	}
+	if _, err := s.Confirm(ctx, me, id); !errors.Is(err, ErrNotPending) {
+		t.Errorf("a discarded expense was confirmed: %v", err)
 	}
 	if _, err := s.Confirm(ctx, me, 999); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a missing expense: %v", err)
@@ -222,7 +232,21 @@ func TestConfirmAndDiscardOnlyFromPending(t *testing.T) {
 
 	other := add(t, s, expense(me, "2026-10-18", 100, "mercado"))
 	if e, err := s.Discard(ctx, me, other); err != nil || e.Status != Discarded {
-		t.Errorf("discard: %+v, %v", e, err)
+		t.Errorf("discarding a pending expense: %+v, %v", e, err)
+	}
+}
+
+func TestAddExpenseAlreadyConfirmed(t *testing.T) {
+	s := open(t)
+	e := expense(me, "2026-10-18", 100, "mercado")
+	e.Status = Confirmed
+	got, err := s.Expense(ctx, add(t, s, e))
+	if err != nil || got.Status != Confirmed || got.ConfirmedAt.IsZero() {
+		t.Errorf("an expense saved without asking: %+v, %v", got, err)
+	}
+	e.Status = Discarded
+	if _, err := s.AddExpense(ctx, e); err == nil {
+		t.Error("a new expense was recorded as discarded")
 	}
 }
 
@@ -363,5 +387,31 @@ func TestSpent(t *testing.T) {
 	usd, n, err := s.Spent(ctx, since)
 	if err != nil || n != 2 || usd < 0.0599 || usd > 0.0601 {
 		t.Errorf("spent: $%f in %d, %v", usd, n, err)
+	}
+}
+
+func TestExtractionFor(t *testing.T) {
+	s := open(t)
+	id := add(t, s, expense(me, "2026-10-18", 100, "mercado"))
+	if _, err := s.ExtractionFor(ctx, id); !errors.Is(err, ErrNotFound) {
+		t.Errorf("no extraction yet: %v", err)
+	}
+	s.RecordExtraction(ctx, Extraction{UserID: me, ExpenseID: id, Model: "claude-opus-5-5", RawJSON: `{"a":1}`, USD: 0.01})
+	s.RecordExtraction(ctx, Extraction{UserID: me, ExpenseID: id, Model: "claude-sonnet-5-5", RawJSON: `{"a":2}`, USD: 0.02})
+
+	x, err := s.ExtractionFor(ctx, id)
+	if err != nil || x.Model != "claude-sonnet-5-5" || x.RawJSON != `{"a":2}` || x.ExpenseID != id || x.CreatedAt.IsZero() {
+		t.Errorf("the latest extraction: %+v, %v", x, err)
+	}
+
+	att, _ := s.AddAttachment(ctx, Attachment{SHA256: "f", Path: "f", MIME: "image/jpeg"})
+	e := expense(me, "2026-10-18", 100, "mercado")
+	e.AttachmentID = att.ID
+	if _, found, _ := s.Duplicate(ctx, e); found {
+		t.Error("a file with no expense yet is a duplicate")
+	}
+	first := add(t, s, e)
+	if dup, found, err := s.Duplicate(ctx, Expense{AttachmentID: att.ID}); err != nil || !found || dup.ID != first {
+		t.Errorf("the file's expense: %+v, %v, %v", dup, found, err)
 	}
 }
