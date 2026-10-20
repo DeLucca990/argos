@@ -21,41 +21,55 @@ It answers only private chats from the users in the allowlist. To update:
 ### Without the source
 
 The image is on Docker Hub as [`pedrodl/argos-bot`](https://hub.docker.com/r/pedrodl/argos-bot),
-for amd64 and arm64. In an empty folder:
+for amd64 and arm64, with its healthcheck. In an empty folder:
 
 ```sh
-curl -fsSL -o .env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
-chmod 600 .env   # fill it in as above
+mkdir -p config/argos/data
+curl -fsSL -o config/argos/.env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
+chmod 600 config/argos/.env   # fill it in as above
 ```
 
-and a `compose.yml`:
+and a `compose.yml` beside `config/`. On a Linux server the data can be a plain folder. `user` is
+the one that owns it (`id -u`:`id -g`, 1000 for Ubuntu's first user): the image runs as 65532,
+and cannot write to a folder that Docker made for root.
 
 ```yaml
 services:
   argos:
-    image: pedrodl/argos-bot:1
+    image: pedrodl/argos-bot:latest
     container_name: argos
-    env_file: .env
-    environment:
-      - TZ=America/Sao_Paulo
+    user: "1000:1000"
+    env_file: ./config/argos/.env
+    volumes:
+      - ./config/argos/data:/data
+    restart: unless-stopped
+```
+
+The database, the receipts and the daily backups are then files in `config/argos/data` — copy
+`backups/`, not the live `argos.db`. A bot already running on the `argos-data` volume moves there,
+stopped, with:
+
+```sh
+docker run --rm -v argos-data:/from -v "$PWD/config/argos/data":/to alpine \
+  sh -c "cp -a /from/. /to/ && chown -R $(id -u):$(id -g) /to"
+```
+
+On a Mac or Windows a shared folder does not keep SQLite's file locks ([Data](#data)): leave out
+`user` and use a volume.
+
+```yaml
     volumes:
       - argos-data:/data
-    read_only: true
-    tmpfs:
-      - /tmp
-    healthcheck:
-      test: ["CMD", "/argos", "healthcheck"]
-      interval: 1m
-      timeout: 10s
-      start_period: 1m
-    restart: unless-stopped
 
 volumes:
   argos-data:
     name: argos-data
 ```
 
-Then `docker compose up -d`, and `docker compose pull && docker compose up -d` to update. `:1`
+`docker compose up -d` starts it and `docker compose pull && docker compose up -d` updates it.
+Without a `compose.yml`, the same with a volume is
+`docker run -d --name argos --env-file config/argos/.env -v argos-data:/data --restart unless-stopped pedrodl/argos-bot:latest`.
+`:1`
 follows every release of 1.x; `:1.2.3` pins one, `:latest` is the newest release and `:edge`
 the newest commit on `main`.
 
@@ -104,6 +118,7 @@ A month is `2026-10`, `10/2026` or `outubro`.
 | `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out; `off` for never |
 | `ARGOS_BACKUP_KEEP` | `14` | daily backups to keep; `0` for none |
 | `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files, and deletes the ones kept before |
+| `TZ` | `America/Sao_Paulo` | the time zone of dates, `/hoje` and the digest |
 | `SQLITE_WEB_PASSWORD` | — | required by `make db-web` |
 
 ## Data
@@ -130,29 +145,6 @@ your own receipts as well, put some in `testdata/receipts/` (kept out of git) an
 ```sh
 make eval-init                       # writes the answer key — correct it by hand
 make eval MODEL=claude-sonnet-5-5    # scores each field
-```
-
-## Development
-
-```sh
-make test
-make run    # outside Docker, with the data in ./data
-```
-
-Every push to `main` publishes `pedrodl/argos-bot:edge`; a release is a tag:
-
-```sh
-git tag v1.2.3 && git push origin v1.2.3   # publishes 1.2.3, 1.2, 1 and latest
-```
-
-```
-cmd/argos/          entrypoint, migrations, backups, healthcheck
-cmd/eval/           make eval
-internal/receipt/   amounts, CNPJ/CPF/NFC-e checks, warnings
-internal/extract/   Claude reading a receipt
-internal/ask/       Claude answering questions, with read-only tools
-internal/store/     SQLite
-internal/telegram/  the bot
 ```
 
 How each part works, and why: [docs/DETAILS.md](docs/DETAILS.md).
