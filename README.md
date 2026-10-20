@@ -213,7 +213,12 @@ at all — is a row in `extractions` with its tokens and estimated dollars, at l
 of a receipt runs around US$ 0,04 on `claude-opus-5-5`; `ARGOS_MODEL=claude-sonnet-5-5` halves
 that and `claude-haiku-5-5` costs a fraction of a cent, at some loss of accuracy on hard receipts.
 
-The files themselves stay in `/data/receipts/`, in the volume, named by their sha256.
+The files themselves stay in `/data/receipts/`, in the volume, named by their sha256 — unless
+`ARGOS_DELETE_RECEIPTS=true`. Then no file is ever written: the receipt is read from memory, and
+what stays is what was read off it and the file's sha256, which is all that telling a resent
+file apart needs, so that still costs nothing. Starting with it on also deletes the files kept
+until then, for good — the daily backups hold the database, not the images. What you lose is
+the original to look at again, or to read anew with a better model.
 
 ## Asking what was spent
 
@@ -369,6 +374,7 @@ a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
 | `ARGOS_DAILY_BUDGET_USD` | — | the most a day of model calls may cost before reading pauses until midnight; `1.50` or `1,50` |
 | `ARGOS_BACKUP_KEEP` | `14` | how many daily backups to keep in `/data/backups`; `0` turns them off |
 | `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
+| `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files: each is read from memory, and the ones kept before are deleted at startup |
 | `ARGOS_DATA_DIR` | `/data` | where the `argos-data` volume is mounted; `make run`, outside Docker, sets `./data` |
 | `SQLITE_WEB_PASSWORD` | — | **required** by `make db-web` |
 | `SQLITE_WEB_ADDR` / `SQLITE_WEB_PORT` | `127.0.0.1` / `8081` | where `make db-web` listens on the host |

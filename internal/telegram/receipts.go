@@ -224,6 +224,9 @@ func (b *Bot) record(ctx context.Context, x store.Extraction) {
 func (b *Bot) saveAttachment(ctx context.Context, data []byte, mime string) (store.Attachment, error) {
 	sum := sha256.Sum256(data)
 	hash := hex.EncodeToString(sum[:])
+	if b.cfg.DeleteFiles {
+		return b.store.AddAttachment(ctx, store.Attachment{SHA256: hash, MIME: mime, Size: int64(len(data))})
+	}
 	rel := filepath.Join(receiptsDir, hash+extensions[mime])
 	file := filepath.Join(b.cfg.DataDir, rel)
 
@@ -315,4 +318,28 @@ func hasDigit(s string) bool { return strings.IndexFunc(s, unicode.IsDigit) >= 0
 
 func escape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
+}
+
+func (b *Bot) purgeFiles(ctx context.Context) error {
+	dir := filepath.Join(b.cfg.DataDir, receiptsDir)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	removed := 0
+	for _, e := range entries {
+		if e.Type().IsRegular() {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err != nil {
+				return err
+			}
+			removed++
+		}
+	}
+	forgotten, err := b.store.ForgetFiles(ctx)
+	if err != nil {
+		return err
+	}
+	log.Printf("receipts: not kept (%s=true); removed %d file(s) kept before, %d attachment(s) now without one",
+		DeleteFilesEnv, removed, forgotten)
+	return nil
 }

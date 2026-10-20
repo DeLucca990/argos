@@ -19,6 +19,7 @@ const (
 	DailyBudgetEnv  = "ARGOS_DAILY_BUDGET_USD"
 	BackupKeepEnv   = "ARGOS_BACKUP_KEEP"
 	DigestAtEnv     = "ARGOS_DIGEST_AT"
+	DeleteFilesEnv  = "ARGOS_DELETE_RECEIPTS"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
@@ -43,6 +44,7 @@ type Config struct {
 	DailyBudget  float64
 	BackupKeep   int
 	DigestAt     *DailyAt
+	DeleteFiles  bool
 }
 
 type DailyAt struct{ Hour, Minute int }
@@ -105,6 +107,14 @@ func LoadConfig() (Config, error) {
 		cfg.BackupKeep = n
 	}
 
+	if raw := env(DeleteFilesEnv); raw != "" {
+		v, err := strconv.ParseBool(raw)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s=%q: must be true or false", DeleteFilesEnv, raw))
+		}
+		cfg.DeleteFiles = v
+	}
+
 	if raw := strings.ToLower(envOr(DigestAtEnv, defaultDigest)); raw != "off" {
 		t, err := time.Parse("15:04", raw)
 		if err != nil {
@@ -132,8 +142,6 @@ func DataDir() (string, error) {
 	return dir, nil
 }
 
-// Checked by writing, not by mode bits: what counts is whether this process,
-// under whatever uid Docker gave it, can create a file there.
 func writable(dir string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err

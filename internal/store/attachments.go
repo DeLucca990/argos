@@ -16,13 +16,17 @@ type Attachment struct {
 	CreatedAt time.Time
 }
 
-// AddAttachment returns the row already stored for a.SHA256 when there is one,
-// with its original path, so the same file sent twice is kept once.
 func (s *Store) AddAttachment(ctx context.Context, a Attachment) (Attachment, error) {
 	var stored Attachment
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		var err error
 		stored, err = attachment(ctx, tx, a.SHA256)
+		if err == nil && stored.Path == "" && a.Path != "" {
+			if _, err := tx.ExecContext(ctx, `UPDATE attachments SET path = ? WHERE id = ?`, a.Path, stored.ID); err != nil {
+				return err
+			}
+			stored.Path = a.Path
+		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
@@ -49,4 +53,12 @@ func attachment(ctx context.Context, q querier, sha256 string) (Attachment, erro
 	}
 	a.CreatedAt, err = parseTimestamp(created)
 	return a, err
+}
+
+func (s *Store) ForgetFiles(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE attachments SET path = '' WHERE path != ''`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

@@ -227,3 +227,30 @@ func TestParseCallback(t *testing.T) {
 		t.Errorf("%q is over Telegram's 64 bytes", got)
 	}
 }
+
+func TestReceiptsNotKept(t *testing.T) {
+	fx := answering(pharmacy())
+	b, user := testBot(t, fx)
+	dir := filepath.Join(b.cfg.DataDir, receiptsDir)
+	os.WriteFile(filepath.Join(dir, "old.jpg"), []byte("kept before"), 0o600)
+	b.store.AddAttachment(ctx, store.Attachment{SHA256: "old", Path: "receipts/old.jpg", MIME: "image/jpeg"})
+
+	b.cfg.DeleteFiles = true
+	if err := b.purgeFiles(ctx); err != nil {
+		t.Fatal(err)
+	}
+	in := incoming{data: photo, mime: "image/jpeg", source: store.SourcePhoto}
+	if r := b.read(ctx, user, in); r.expenseID != 1 {
+		t.Fatalf("not read: %q", r.text)
+	}
+	if left, _ := os.ReadDir(dir); len(left) != 0 {
+		t.Errorf("files left in %s: %v", dir, left)
+	}
+	e, _ := b.store.Expense(ctx, 1)
+	if e.AttachmentID == 0 {
+		t.Error("the expense lost its attachment row, which is what tells a resent file apart")
+	}
+	if r := b.read(ctx, user, in); fx.calls != 1 || !strings.Contains(r.text, "já foi registrado") {
+		t.Errorf("the same file sent again: %d calls, %q", fx.calls, r.text)
+	}
+}

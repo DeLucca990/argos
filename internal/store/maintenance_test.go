@@ -168,3 +168,18 @@ func TestDigestsAndUsers(t *testing.T) {
 		t.Errorf("users: %+v, %v", users, err)
 	}
 }
+
+func TestFilesForgottenAndKeptAgain(t *testing.T) {
+	s := open(t)
+	kept, _ := s.AddAttachment(ctx, Attachment{SHA256: "a", Path: "receipts/a.jpg", MIME: "image/jpeg"})
+	s.AddAttachment(ctx, Attachment{SHA256: "b", MIME: "image/jpeg"})
+	if n, err := s.ForgetFiles(ctx); err != nil || n != 1 {
+		t.Errorf("forgot %d, %v", n, err)
+	}
+	if a, _ := attachment(ctx, s.db, "a"); a.Path != "" || a.ID != kept.ID {
+		t.Errorf("after forgetting: %+v", a)
+	}
+	if again, _ := s.AddAttachment(ctx, Attachment{SHA256: "a", Path: "receipts/a.jpg", MIME: "image/jpeg"}); again.Path != "receipts/a.jpg" || again.ID != kept.ID {
+		t.Errorf("the same file kept again: %+v", again)
+	}
+}

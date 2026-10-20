@@ -92,6 +92,22 @@ func TestConfigReportsEveryProblemAtOnce(t *testing.T) {
 	}
 }
 
+func TestConfigDeleteReceipts(t *testing.T) {
+	base := map[string]string{TokenEnv: "123:abc", AllowedUsersEnv: "42", DataDirEnv: t.TempDir(), anthropicKeyEnv: "x"}
+	for raw, want := range map[string]bool{"": false, "true": true, "1": true, "false": false} {
+		base[DeleteFilesEnv] = raw
+		setEnv(t, base)
+		t.Setenv(DeleteFilesEnv, raw)
+		if cfg, err := LoadConfig(); err != nil || cfg.DeleteFiles != want {
+			t.Errorf("%q: %v, %v", raw, cfg.DeleteFiles, err)
+		}
+	}
+	t.Setenv(DeleteFilesEnv, "talvez")
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), DeleteFilesEnv) {
+		t.Errorf("talvez: %v", err)
+	}
+}
+
 func TestConfigRefusesUsernames(t *testing.T) {
 	setEnv(t, map[string]string{
 		TokenEnv:        "123:abc",

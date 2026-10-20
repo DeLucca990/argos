@@ -54,6 +54,11 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, receiptsDir), 0o750); err != nil {
 		return nil, err
 	}
+	if cfg.DeleteFiles {
+		if err := b.purgeFiles(context.Background()); err != nil {
+			return nil, err
+		}
+	}
 
 	tg, err := bot.New(cfg.Token,
 		bot.WithMiddlewares(b.authorize, b.remember),
