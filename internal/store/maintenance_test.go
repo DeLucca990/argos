@@ -142,3 +142,29 @@ func TestDailyBackupKeepsTheNewest(t *testing.T) {
 		t.Errorf("kept %v", files)
 	}
 }
+
+func TestDigestsAndUsers(t *testing.T) {
+	s := open(t)
+	if sent, err := s.DigestSent(ctx, me, "2026-09"); err != nil || sent {
+		t.Errorf("not sent yet: %v, %v", sent, err)
+	}
+	for range 2 {
+		if err := s.MarkDigestSent(ctx, me, "2026-09"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sent, _ := s.DigestSent(ctx, me, "2026-09"); !sent {
+		t.Error("marked, but not sent")
+	}
+	if sent, _ := s.DigestSent(ctx, them, "2026-09"); sent {
+		t.Error("someone else's digest counted as sent")
+	}
+	if err := s.MarkDigestSent(ctx, me, "setembro"); err == nil {
+		t.Error("a month that is not YYYY-MM was accepted")
+	}
+
+	users, err := s.Users(ctx)
+	if err != nil || len(users) != 2 || users[0].TelegramID != 4242 || users[1].TelegramID != 7777 {
+		t.Errorf("users: %+v, %v", users, err)
+	}
+}

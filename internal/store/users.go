@@ -59,7 +59,7 @@ func user(ctx context.Context, q querier, id int64) (User, error) {
 	return u, err
 }
 
-func scanUser(row *sql.Row) (User, error) {
+func scanUser(row interface{ Scan(...any) error }) (User, error) {
 	var (
 		u                 User
 		created, lastSeen sql.NullString
@@ -74,4 +74,21 @@ func scanUser(row *sql.Row) (User, error) {
 	}
 	u.LastSeenAt, err = parseTimestamp(lastSeen)
 	return u, err
+}
+
+func (s *Store) Users(ctx context.Context) ([]User, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
 }

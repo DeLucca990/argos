@@ -57,6 +57,8 @@ func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest str
 	case "exportar":
 		b.export(ctx, msg, rest, now)
 		return
+	case "resumo":
+		text, err = b.digestCommand(ctx, user.ID, rest, now)
 	case "categorias":
 		text = categoriesText(b.catList)
 	case "cost":

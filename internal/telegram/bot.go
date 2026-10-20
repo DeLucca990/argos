@@ -26,6 +26,7 @@ type Bot struct {
 	extractor extractor
 	asker     asker
 	tg        *bot.Bot
+	notify    func(ctx context.Context, chatID int64, text string) error
 
 	cats    map[string]store.Category
 	catList []store.Category
@@ -64,6 +65,7 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 		return nil, fmt.Errorf("telegram: %w (is %s the token @BotFather gave?)", err, TokenEnv)
 	}
 	b.tg = tg
+	b.notify = b.deliver
 	return b, nil
 }
 
@@ -98,6 +100,12 @@ func (b *Bot) Run(ctx context.Context) {
 	log.Printf("telegram bot running for %d user(s), data in %s, reading receipts with %s at effort %s, %s",
 		len(b.cfg.AllowedUsers), b.cfg.DataDir, b.cfg.Model, b.cfg.Effort, budget)
 	go b.heartbeat(ctx)
+	if b.cfg.DigestAt != nil {
+		log.Printf("monthly digest on the 1st at %s, or on the next start within %d days", b.cfg.DigestAt, digestCatchUpDays)
+		go b.runDigests(ctx)
+	} else {
+		log.Printf("monthly digest off (%s=off)", DigestAtEnv)
+	}
 	b.tg.Start(ctx)
 }
 

@@ -218,6 +218,7 @@ The files themselves stay in `/data/receipts/`, in the volume, named by their sh
 | `/ultimos [n]` | the latest expenses, 10 unless a number up to 50 follows |
 | `/desfazer` | discards the expense saved last — the same as its card's Descartar |
 | `/exportar [mês \| tudo]` | a month, or everything, as a CSV file |
+| `/resumo [mês]` | the monthly digest below, for any month; the last closed one unless named |
 | `/categorias` | the categories |
 | `/cost` | what the model calls cost today, in 7 days and in 30 — readings, corrections and questions apart — and the model making them |
 
@@ -243,6 +244,39 @@ expense — date, time, merchant, CNPJ or CPF, category, payment method, amount,
 description, where it came from and its id. Merchant names and descriptions were read off
 receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a planted
 `=HYPERLINK(…)` arrives as text instead of running as a formula when the file opens.
+
+### The monthly digest
+
+On the 1st, at `ARGOS_DIGEST_AT` (09:00 unless set; `off` for never), everyone in the allowlist
+gets the month that just closed — their own expenses only:
+
+```
+📅 Resumo de setembro de 2026
+
+💰 R$ 388,00 em 3 gastos · média de R$ 12,93 por dia
+↗️ R$ 288,00 a mais que em agosto (+288%)
+
+Por categoria
+🛒 Mercado — R$ 370,00 (95%) · ↗️ +R$ 270,00
+🍽️ Restaurante — R$ 18,00 (5%) · novo
+
+Os maiores
+• 02/09 🛒 Supermercado Extra — R$ 250,00
+• 29/09 🛒 Extra Hiper — R$ 120,00
+• 15/09 🍽️ Padaria — R$ 18,00
+
+Pagamento
+Crédito R$ 250,00 · Débito R$ 120,00 · Pix R$ 18,00
+```
+
+It is a template over the database, with no model in it, so it costs nothing. What was sent is a
+row in `digests`, per person and month, which makes a restart safe: nobody gets the same month
+twice, and a bot that was down on the 1st sends it when it comes back, through the 7th — after
+that it waits for the next month. A month with no expenses sends nothing. A person who blocked
+the bot is recorded as done rather than retried for a week.
+
+`/resumo` shows the same at any time. For the month under way it reads *Outubro de 2026, até o
+dia 20*, and compares with the same days of the month before rather than with the whole of it.
 
 ### In plain words
 
@@ -327,6 +361,7 @@ a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
 | `ARGOS_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max`: how much it thinks before answering |
 | `ARGOS_DAILY_BUDGET_USD` | — | the most a day of model calls may cost before reading pauses until midnight; `1.50` or `1,50` |
 | `ARGOS_BACKUP_KEEP` | `14` | how many daily backups to keep in `/data/backups`; `0` turns them off |
+| `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
 | `ARGOS_DATA_DIR` | `/data` | where the `argos-data` volume is mounted; `make run`, outside Docker, sets `./data` |
 | `SQLITE_WEB_PASSWORD` | — | **required** by `make db-web` |
 | `SQLITE_WEB_ADDR` / `SQLITE_WEB_PORT` | `127.0.0.1` / `8081` | where `make db-web` listens on the host |

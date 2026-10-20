@@ -123,4 +123,12 @@ CREATE TABLE cards (
 ALTER TABLE extractions ADD COLUMN kind TEXT NOT NULL DEFAULT 'receipt'
     CHECK (kind IN ('receipt', 'correction', 'question'));
 `},
+	{name: "0004_digests", sql: `
+CREATE TABLE digests (
+    user_id INTEGER NOT NULL REFERENCES users (id),
+    month   TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, month)
+);
+`},
 }

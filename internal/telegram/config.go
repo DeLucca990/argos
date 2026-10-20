@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 	EffortEnv       = "ARGOS_EFFORT"
 	DailyBudgetEnv  = "ARGOS_DAILY_BUDGET_USD"
 	BackupKeepEnv   = "ARGOS_BACKUP_KEEP"
+	DigestAtEnv     = "ARGOS_DIGEST_AT"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
@@ -27,6 +29,7 @@ const (
 	defaultModel   = "claude-opus-5-5"
 	defaultEffort  = "low"
 	defaultKeep    = 14
+	defaultDigest  = "09:00"
 )
 
 var efforts = []string{"low", "medium", "high", "xhigh", "max"}
@@ -39,7 +42,12 @@ type Config struct {
 	Effort       string
 	DailyBudget  float64
 	BackupKeep   int
+	DigestAt     *DailyAt
 }
+
+type DailyAt struct{ Hour, Minute int }
+
+func (d DailyAt) String() string { return fmt.Sprintf("%02d:%02d", d.Hour, d.Minute) }
 
 func LoadConfig() (Config, error) {
 	var problems []string
@@ -95,6 +103,15 @@ func LoadConfig() (Config, error) {
 			problems = append(problems, fmt.Sprintf("%s=%q: must be how many daily backups to keep, 0 for none", BackupKeepEnv, raw))
 		}
 		cfg.BackupKeep = n
+	}
+
+	if raw := strings.ToLower(envOr(DigestAtEnv, defaultDigest)); raw != "off" {
+		t, err := time.Parse("15:04", raw)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s=%q: must be a time of day such as 09:00, or off", DigestAtEnv, raw))
+		} else {
+			cfg.DigestAt = &DailyAt{Hour: t.Hour(), Minute: t.Minute()}
+		}
 	}
 
 	if len(problems) > 0 {

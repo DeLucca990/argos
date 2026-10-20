@@ -73,3 +73,18 @@ func (s *Store) DailyBackup(ctx context.Context, dir string, keep int, now time.
 	}
 	return written, removed, nil
 }
+
+func (s *Store) DigestSent(ctx context.Context, userID int64, month string) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM digests WHERE user_id = ? AND month = ?`, userID, month).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (s *Store) MarkDigestSent(ctx context.Context, userID int64, month string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO digests (user_id, month, sent_at) VALUES (?, ?, ?)
+		ON CONFLICT (user_id, month) DO NOTHING`, userID, month, s.timestamp())
+	return err
+}

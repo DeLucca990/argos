@@ -21,6 +21,7 @@ var commands = []command{
 	{name: "ultimos", description: "Os últimos gastos", usage: "[quantos]"},
 	{name: "desfazer", description: "Descarta o último gasto salvo"},
 	{name: "exportar", description: "O mês numa planilha CSV", usage: "[2026-10 | tudo]"},
+	{name: "resumo", description: "O resumo de um mês, comparado ao anterior", usage: "[mês]"},
 	{name: "categorias", description: "As categorias de gasto"},
 	{name: "cost", description: "Quanto as leituras custaram"},
 	{name: "help", description: "O que este bot sabe fazer"},
