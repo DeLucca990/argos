@@ -9,6 +9,7 @@ import (
 
 type Extraction struct {
 	ID               int64
+	Kind             string
 	UserID           int64
 	AttachmentID     int64
 	ExpenseID        int64
@@ -23,16 +24,22 @@ type Extraction struct {
 	CreatedAt        time.Time
 }
 
+const (
+	KindReceipt    = "receipt"
+	KindCorrection = "correction"
+	KindQuestion   = "question"
+)
+
 func (s *Store) ExtractionFor(ctx context.Context, expenseID int64) (Extraction, error) {
 	var (
 		x                   Extraction
 		attachment, expense sql.NullInt64
 		created             sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, `SELECT id, user_id, attachment_id, expense_id, model, raw_json, failed,
+	err := s.db.QueryRowContext(ctx, `SELECT id, kind, user_id, attachment_id, expense_id, model, raw_json, failed,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, usd, created_at
 		FROM extractions WHERE expense_id = ? ORDER BY id DESC LIMIT 1`, expenseID).
-		Scan(&x.ID, &x.UserID, &attachment, &expense, &x.Model, &x.RawJSON, &x.Failed, &x.InputTokens,
+		Scan(&x.ID, &x.Kind, &x.UserID, &attachment, &expense, &x.Model, &x.RawJSON, &x.Failed, &x.InputTokens,
 			&x.OutputTokens, &x.CacheReadTokens, &x.CacheWriteTokens, &x.USD, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Extraction{}, ErrNotFound
@@ -46,10 +53,13 @@ func (s *Store) ExtractionFor(ctx context.Context, expenseID int64) (Extraction,
 }
 
 func (s *Store) RecordExtraction(ctx context.Context, x Extraction) (int64, error) {
-	res, err := s.db.ExecContext(ctx, `INSERT INTO extractions (user_id, attachment_id, expense_id, model,
+	if x.Kind == "" {
+		x.Kind = KindReceipt
+	}
+	res, err := s.db.ExecContext(ctx, `INSERT INTO extractions (kind, user_id, attachment_id, expense_id, model,
 		raw_json, failed, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, usd, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		x.UserID, nullInt(x.AttachmentID), nullInt(x.ExpenseID), x.Model, x.RawJSON, x.Failed,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		x.Kind, x.UserID, nullInt(x.AttachmentID), nullInt(x.ExpenseID), x.Model, x.RawJSON, x.Failed,
 		x.InputTokens, x.OutputTokens, x.CacheReadTokens, x.CacheWriteTokens, x.USD, s.timestamp())
 	if err != nil {
 		return 0, err
@@ -61,4 +71,23 @@ func (s *Store) Spent(ctx context.Context, since time.Time) (usd float64, extrac
 	err = s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(usd), 0), COUNT(*) FROM extractions WHERE created_at >= ?`,
 		since.UTC().Format(timestampLayout)).Scan(&usd, &extractions)
 	return usd, extractions, err
+}
+
+func (s *Store) Calls(ctx context.Context, since time.Time) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT kind, COUNT(*) FROM extractions WHERE created_at >= ? GROUP BY kind`,
+		since.UTC().Format(timestampLayout))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	calls := map[string]int{}
+	for rows.Next() {
+		var kind string
+		var n int
+		if err := rows.Scan(&kind, &n); err != nil {
+			return nil, err
+		}
+		calls[kind] = n
+	}
+	return calls, rows.Err()
 }

@@ -61,6 +61,7 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 
 	res, err := b.extractor.Correct(ctx, extract.Correction{Current: rawFrom(e), Text: text, Today: now})
 	record := b.recordOf(user.ID, e.AttachmentID, res, err)
+	record.Kind = store.KindCorrection
 	record.ExpenseID = id
 	logRead(user, res, err)
 	b.record(ctx, record)

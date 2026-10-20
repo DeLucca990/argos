@@ -3,10 +3,10 @@
 A Telegram bot that keeps track of what you spend: send it a receipt — a photo, a PDF, or a line
 of text — and it extracts the purchase with Claude and stores it in SQLite.
 
-**Status: phase 4.** It reads receipts, records them as they arrive, takes corrections in plain
-words, and answers what was spent — by day, week and month, the latest ones, and a spreadsheet
-of any month. It backs itself up daily, reports its health, keeps to a daily budget if given one,
-and comes with an evaluation to choose its model by.
+**Status: phase 5, under way.** It reads receipts, records them as they arrive, takes
+corrections in plain words, and answers what was spent — in commands, by day, week and month,
+and in questions asked in Portuguese. It backs itself up daily, reports its health, keeps to a
+daily budget if given one, and comes with an evaluation to choose its model by.
 
 ## Running it
 
@@ -219,7 +219,7 @@ The files themselves stay in `/data/receipts/`, in the volume, named by their sh
 | `/desfazer` | discards the expense saved last — the same as its card's Descartar |
 | `/exportar [mês \| tudo]` | a month, or everything, as a CSV file |
 | `/categorias` | the categories |
-| `/cost` | what reading receipts cost today, in 7 days and in 30, and the model doing it |
+| `/cost` | what the model calls cost today, in 7 days and in 30 — readings, corrections and questions apart — and the model making them |
 
 A month is `2026-10`, `10/2026`, `10`, `outubro` or `out`, with a year after the name if it is
 not this one — `março 2025`. A month later in the year than the current one means last year's:
@@ -243,6 +243,51 @@ expense — date, time, merchant, CNPJ or CPF, category, payment method, amount,
 description, where it came from and its id. Merchant names and descriptions were read off
 receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a planted
 `=HYPERLINK(…)` arrives as text instead of running as a formula when the file opens.
+
+### In plain words
+
+Anything the commands do not cover can be asked: *quanto gastei com mercado em setembro?*,
+*qual foi meu maior gasto da semana?*, *quanto foi de cerveja este ano?*, *compara setembro e
+outubro*. The bot answers "🤔 Pensando…" and then the answer, with what it cost:
+
+```
+Em setembro você gastou R$ 388,00, em 3 gastos:
+
+• Mercado: R$ 370,00 (95%)
+• Restaurante: R$ 18,00 (5%)
+
+≈ US$ 0,0300
+```
+
+**What counts as a question.** A message with a `?`, or one that starts with quanto, qual,
+quais, quando, onde, como, quem, o que, por que, mostra, lista, compara or resume. Anything else
+with a number in it is still a purchase — *almoço 35,90 no pix* — which is why *quanto gastei em
+2026?* needs its question word or its `?` to be read as one.
+
+**How it is answered.** Claude gets three tools and nothing else, all reading, none writing,
+each scoped to the asker's saved expenses:
+
+| Tool | Answers |
+| --- | --- |
+| `spending_totals` | sums, overall or by category, merchant, payment method, day, week or month, with each group's share |
+| `list_expenses` | the expenses themselves, newest or largest first, up to 50 |
+| `search_items` | the item lines of receipts that listed them — *cerveja*, *gasolina* — with their sum |
+
+Each takes the same filters: a date range, a category, part of a merchant's name, a payment
+method, a minimum and a maximum. There is no free-form SQL: what Claude can ask the database is
+exactly these three questions, and someone else's expenses are not among the answers. Every
+figure in a reply comes from a tool — the prompt forbids estimating one — and the merchant names
+and item lines it reads are treated as data, since they came off receipts.
+
+**A conversation.** Follow-ups work — *e em agosto?*, *e no crédito?* — for 30 minutes after the
+last question; after that, or after a long one, it starts over. The history is kept whole, never
+trimmed, so the prompt cache holds and the earlier turns stay valid. One question per person at
+a time.
+
+Questions count toward `ARGOS_DAILY_BUDGET_USD` like receipts, and `/cost` tells them apart:
+*Hoje: US$ 0,0854 · 2 leituras · 1 correção · 3 perguntas*. On `claude-opus-5-5` a question runs
+around two or three cents; `claude-haiku-5-5` answers the same for a fraction of a cent, and
+reads ambiguous follow-ups less well.
 
 ## Choosing the model by your own receipts
 
@@ -332,7 +377,9 @@ cmd/argos/           entrypoint: .env loading, the database, signal handling, ba
 cmd/eval/            make eval: reads your own receipts with a model and scores each field against what they say
 internal/dotenv/     reads a .env into the environment before the configuration is checked
 internal/receipt/    what a receipt is: amounts in cents, CNPJ/CPF/NFC-e checks, the warnings; imports nothing
-internal/extract/    Claude: the schema, the request, images made readable, what each call cost
+internal/extract/    Claude: the schema, the request, images made readable, corrections
+internal/ask/        Claude answering questions: the conversation, and the three read-only tools it may call
+internal/cost/       what each model call cost, at list prices, fallbacks included
 internal/store/      SQLite — migrations, expenses, reports; knows nothing of Telegram or Claude
 internal/telegram/   the bot — configuration, authorisation, the card and its buttons, commands
 ```

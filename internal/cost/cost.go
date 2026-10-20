@@ -1,4 +1,4 @@
-package extract
+package cost
 
 import (
 	"slices"
@@ -59,7 +59,7 @@ type Spend struct {
 	Unpriced                             []string
 }
 
-func (s *Spend) add(o Spend) {
+func (s *Spend) Add(o Spend) {
 	s.Input += o.Input
 	s.Output += o.Output
 	s.CacheRead += o.CacheRead
@@ -77,7 +77,7 @@ func (s *Spend) add(o Spend) {
 	}
 }
 
-func spendOf(resp *anthropic.BetaMessage) Spend {
+func Of(resp *anthropic.BetaMessage) Spend {
 	if len(resp.Usage.Iterations) == 0 {
 		u := resp.Usage
 		return priced(string(resp.Model), u.InputTokens, u.OutputTokens, u.CacheReadInputTokens,
@@ -90,7 +90,7 @@ func spendOf(resp *anthropic.BetaMessage) Spend {
 		if model == "" {
 			model = string(resp.Model)
 		}
-		total.add(priced(model, it.InputTokens, it.OutputTokens, it.CacheReadInputTokens,
+		total.Add(priced(model, it.InputTokens, it.OutputTokens, it.CacheReadInputTokens,
 			it.CacheCreationInputTokens, it.CacheCreation.Ephemeral5mInputTokens, it.CacheCreation.Ephemeral1hInputTokens))
 	}
 	return total

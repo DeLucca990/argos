@@ -12,6 +12,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
+	"github.com/DeLucca990/argos-bot/internal/cost"
 	"github.com/DeLucca990/argos-bot/internal/receipt"
 )
 
@@ -52,7 +53,7 @@ type Result struct {
 	Raw     receipt.Raw
 	RawJSON string
 	Model   string
-	Spend   Spend
+	Spend   cost.Spend
 }
 
 type Extractor struct {
@@ -116,7 +117,7 @@ func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.
 			Format: anthropic.BetaJSONOutputFormatParam{Schema: x.schema},
 		},
 	}
-	if hasFallbacks(x.model) {
+	if HasFallbacks(x.model) {
 		params.Fallbacks = anthropic.BetaFallbacksParamOfDefault()
 		params.Betas = []anthropic.AnthropicBeta{anthropic.AnthropicBetaServerSideFallback2026_07_01}
 	}
@@ -125,7 +126,7 @@ func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.
 	if err != nil {
 		return Result{}, fmt.Errorf("claude: %w", err)
 	}
-	res := Result{Model: string(resp.Model), Spend: spendOf(resp)}
+	res := Result{Model: string(resp.Model), Spend: cost.Of(resp)}
 
 	switch resp.StopReason {
 	case anthropic.BetaStopReasonRefusal:
@@ -160,7 +161,7 @@ func userText(in Input) string {
 	return b.String()
 }
 
-func hasFallbacks(model string) bool {
+func HasFallbacks(model string) bool {
 	for _, prefix := range []string{"claude-fable-", "claude-mythos-", "claude-opus-5", "claude-sonnet-5-5"} {
 		if strings.HasPrefix(model, prefix) {
 			return true

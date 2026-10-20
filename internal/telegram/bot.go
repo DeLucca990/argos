@@ -13,6 +13,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/DeLucca990/argos-bot/internal/ask"
 	"github.com/DeLucca990/argos-bot/internal/extract"
 	"github.com/DeLucca990/argos-bot/internal/store"
 )
@@ -23,6 +24,7 @@ type Bot struct {
 	cfg       Config
 	store     *store.Store
 	extractor extractor
+	asker     asker
 	tg        *bot.Bot
 
 	cats    map[string]store.Category
@@ -46,6 +48,7 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 		return nil, err
 	}
 	b.extractor = x
+	b.asker = ask.New(cfg.Model, cfg.Effort, st, b.catList)
 
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, receiptsDir), 0o750); err != nil {
 		return nil, err
@@ -192,6 +195,10 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	}
 	if id, ok := b.cardFor(ctx, msg); ok {
 		b.onCorrection(ctx, msg, id)
+		return
+	}
+	if isQuestion(msg.Text) {
+		b.onQuestion(ctx, msg)
 		return
 	}
 	switch {

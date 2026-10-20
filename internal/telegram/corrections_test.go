@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DeLucca990/argos-bot/internal/cost"
 	"github.com/DeLucca990/argos-bot/internal/extract"
 	"github.com/DeLucca990/argos-bot/internal/receipt"
 	"github.com/DeLucca990/argos-bot/internal/store"
@@ -13,7 +14,7 @@ import (
 
 func answer(raw receipt.Raw, usd float64) extract.Result {
 	body, _ := json.Marshal(raw)
-	return extract.Result{Raw: raw, RawJSON: string(body), Model: "claude-opus-5-5", Spend: extract.Spend{USD: usd}}
+	return extract.Result{Raw: raw, RawJSON: string(body), Model: "claude-opus-5-5", Spend: cost.Spend{USD: usd}}
 }
 
 func TestCorrectAppliesWhatTheModelChanged(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DeLucca990/argos-bot/internal/cost"
 	"github.com/DeLucca990/argos-bot/internal/extract"
 	"github.com/DeLucca990/argos-bot/internal/receipt"
 	"github.com/DeLucca990/argos-bot/internal/store"
@@ -47,7 +48,7 @@ func answering(raw receipt.Raw) *fakeExtractor {
 	body, _ := json.Marshal(raw)
 	return &fakeExtractor{res: extract.Result{
 		Raw: raw, RawJSON: string(body), Model: "claude-opus-5-5",
-		Spend: extract.Spend{Input: 5000, Output: 1000, USD: 0.04, Models: []string{"claude-opus-5-5"}},
+		Spend: cost.Spend{Input: 5000, Output: 1000, USD: 0.04, Models: []string{"claude-opus-5-5"}},
 	}}
 }
 
@@ -136,7 +137,7 @@ func TestTheSameFileTwiceSkipsTheModel(t *testing.T) {
 func TestReadsThatRecordNoExpenseStillRecordTheirCost(t *testing.T) {
 	notReceipt := answering(receipt.Raw{IsReceipt: false, NotReceiptReason: "É a foto de um gato."})
 	noTotal := answering(receipt.Raw{IsReceipt: true, Merchant: "Bar", Total: ""})
-	failed := &fakeExtractor{err: errors.New("claude: 529 overloaded"), res: extract.Result{Spend: extract.Spend{USD: 0.01}}}
+	failed := &fakeExtractor{err: errors.New("claude: 529 overloaded"), res: extract.Result{Spend: cost.Spend{USD: 0.01}}}
 
 	for name, c := range map[string]struct {
 		fx   *fakeExtractor

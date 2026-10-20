@@ -53,7 +53,9 @@ func helpText() string {
 		"• a foto de um cupom, nota ou comprovante\n" +
 		"• um PDF, como a nota fiscal ou o comprovante do banco\n" +
 		"• ou uma linha de texto: <i>almoço 35,90 no pix</i>\n\n" +
-		"Eu salvo na hora e mostro o que li. Se algo estiver errado, toque em Descartar e mande de novo.\n\n")
+		"Eu salvo na hora e mostro o que li. Para corrigir, responda ao cartão: <i>foi 45,90 no crédito</i>.\n\n" +
+		"E pergunte o que quiser sobre os gastos: <i>quanto gastei com mercado em setembro?</i>, " +
+		"<i>qual foi meu maior gasto da semana?</i>\n\n")
 	for _, c := range commands {
 		line := "/" + c.name
 		if c.usage != "" {

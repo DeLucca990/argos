@@ -23,7 +23,7 @@ func TestAnExistingDatabaseGetsTheNewMigrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if got := strings.Join(s.Applied(), ","); got != "0002_cards" || s.Version() != 2 {
+	if got := strings.Join(s.Applied(), ","); got != names(migrations[1:]) || s.Version() != len(migrations) {
 		t.Errorf("applied %q, now at %d", got, s.Version())
 	}
 	if u, err := s.User(ctx, 1); err != nil || u.TelegramID != 42 {

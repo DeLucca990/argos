@@ -110,7 +110,7 @@ func TestOpenRefusesANewerSchema(t *testing.T) {
 
 func TestOpenReportsWhatItApplied(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "argos.db")
-	for _, want := range []string{"0001_init,0002_cards", ""} {
+	for _, want := range []string{names(migrations), ""} {
 		s, err := Open(file)
 		if err != nil {
 			t.Fatal(err)
@@ -415,4 +415,12 @@ func TestExtractionFor(t *testing.T) {
 	if dup, found, err := s.Duplicate(ctx, Expense{AttachmentID: att.ID}); err != nil || !found || dup.ID != first {
 		t.Errorf("the file's expense: %+v, %v, %v", dup, found, err)
 	}
+}
+
+func names(list []migration) string {
+	var out []string
+	for _, m := range list {
+		out = append(out, m.name)
+	}
+	return strings.Join(out, ",")
 }

@@ -119,4 +119,8 @@ CREATE TABLE cards (
     PRIMARY KEY (chat_id, message_id)
 );
 `},
+	{name: "0003_extraction_kinds", sql: `
+ALTER TABLE extractions ADD COLUMN kind TEXT NOT NULL DEFAULT 'receipt'
+    CHECK (kind IN ('receipt', 'correction', 'question'));
+`},
 }

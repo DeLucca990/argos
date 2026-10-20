@@ -202,11 +202,11 @@ func (b *Bot) costText(ctx context.Context, now time.Time) (string, error) {
 		if w.since.Equal(today) {
 			spentToday = usd
 		}
-		reads := "leituras"
-		if n == 1 {
-			reads = "leitura"
+		calls, err := b.store.Calls(ctx, w.since)
+		if err != nil {
+			return "", err
 		}
-		fmt.Fprintf(&s, "%s: US$ %s · %d %s\n", w.label, dollars(usd, 4), n, reads)
+		fmt.Fprintf(&s, "%s: US$ %s · %s\n", w.label, dollars(usd, 4), callsText(n, calls))
 	}
 	s.WriteString("\nModelo: " + html.EscapeString(b.cfg.Model) + ", effort " + html.EscapeString(b.cfg.Effort))
 	if b.cfg.DailyBudget > 0 {
@@ -277,4 +277,24 @@ func cell(s string) string {
 		return "'" + s
 	}
 	return s
+}
+
+func callsText(total int, calls map[string]int) string {
+	var parts []string
+	for _, k := range []struct{ kind, one, many string }{
+		{store.KindReceipt, "leitura", "leituras"},
+		{store.KindCorrection, "correção", "correções"},
+		{store.KindQuestion, "pergunta", "perguntas"},
+	} {
+		switch n := calls[k.kind]; {
+		case n == 1:
+			parts = append(parts, "1 "+k.one)
+		case n > 1:
+			parts = append(parts, strconv.Itoa(n)+" "+k.many)
+		}
+	}
+	if len(parts) == 0 {
+		return strconv.Itoa(total) + " leituras"
+	}
+	return strings.Join(parts, " · ")
 }
