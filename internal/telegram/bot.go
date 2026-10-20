@@ -82,7 +82,7 @@ func (b *Bot) loadCategories(ctx context.Context) error {
 func (b *Bot) Run(ctx context.Context) {
 	var cmds []models.BotCommand
 	for _, c := range commands {
-		cmds = append(cmds, models.BotCommand{Command: c.name, Description: c.description})
+		cmds = append(cmds, models.BotCommand{Command: c.name, Description: c.menuDescription()})
 	}
 	if _, err := b.tg.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: cmds}); err != nil {
 		log.Printf("telegram: could not publish the command list: %v", err)
@@ -180,11 +180,12 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	}
 
 	msg := u.Message
-	switch name, _, _ := parseCommand(msg.Text); {
-	case name == "categorias":
-		b.sendHTML(ctx, msg.Chat.ID, categoriesText(b.catList))
-	case name != "":
-		b.sendHTML(ctx, msg.Chat.ID, helpText())
+	name, _, rest := parseCommand(msg.Text)
+	if name != "" {
+		b.onCommand(ctx, msg, name, rest)
+		return
+	}
+	switch {
 	case len(msg.Photo) > 0 || msg.Document != nil:
 		b.onFile(ctx, msg)
 	case hasDigit(msg.Text):

@@ -3,8 +3,8 @@
 A Telegram bot that keeps track of what you spend: send it a receipt — a photo, a PDF, or a line
 of text — and it extracts the purchase with Claude and stores it in SQLite.
 
-**Status: phase 2.** It reads receipts and records them as they arrive. Reports — `/hoje`,
-`/mes`, `/exportar` and the rest — come in phase 3.
+**Status: phase 3.** It reads receipts, records them as they arrive, and answers what was spent:
+by day, week and month, the latest ones, and a spreadsheet of any month.
 
 ## Running it
 
@@ -165,6 +165,42 @@ of a receipt runs around US$ 0,04 on `claude-opus-5-5`; `ARGOS_MODEL=claude-sonn
 that and `claude-haiku-5-5` costs a fraction of a cent, at some loss of accuracy on hard receipts.
 
 The files themselves stay in `/data/receipts/`, in the volume, named by their sha256.
+
+## Asking what was spent
+
+| Command | Answers |
+| --- | --- |
+| `/hoje` | today's expenses, one per line, with the time when the receipt had one |
+| `/semana` | this calendar week, Monday to Sunday, by category |
+| `/mes [mês]` | a month by category, with each one's share; the current month unless named |
+| `/ultimos [n]` | the latest expenses, 10 unless a number up to 50 follows |
+| `/desfazer` | discards the expense saved last — the same as its card's Descartar |
+| `/exportar [mês \| tudo]` | a month, or everything, as a CSV file |
+| `/categorias` | the categories |
+| `/cost` | what reading receipts cost today, in 7 days and in 30, and the model doing it |
+
+A month is `2026-10`, `10/2026`, `10`, `outubro` or `out`, with a year after the name if it is
+not this one — `março 2025`. A month later in the year than the current one means last year's:
+in October, `/mes dezembro` is December 2025.
+
+```
+📊 Outubro de 2026
+💰 R$ 312,38 em 4 gastos
+
+⛽ Combustível — R$ 200,00 (64%) · 1
+🛒 Mercado — R$ 97,38 (31%) · 2
+🍽️ Restaurante — R$ 15,00 (5%) · 1
+```
+
+Every report counts saved expenses only — never a discarded one — and only the sender's: each
+person in `TELEGRAM_ALLOWED_USER_IDS` sees what they sent.
+
+**The CSV** is made for a spreadsheet in Portuguese: `;` between columns, a decimal comma
+(`87,40`), dates as `20/10/2026`, and a byte-order mark so Excel reads the accents. One row per
+expense — date, time, merchant, CNPJ or CPF, category, payment method, amount, currency,
+description, where it came from and its id. Merchant names and descriptions were read off
+receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a planted
+`=HYPERLINK(…)` arrives as text instead of running as a formula when the file opens.
 
 ## Configuration
 

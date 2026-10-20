@@ -11,11 +11,26 @@ import (
 type command struct {
 	name        string
 	description string
+	usage       string
 }
 
 var commands = []command{
+	{name: "hoje", description: "Os gastos de hoje"},
+	{name: "semana", description: "Esta semana, por categoria"},
+	{name: "mes", description: "O mês, por categoria", usage: "[2026-10 | outubro]"},
+	{name: "ultimos", description: "Os últimos gastos", usage: "[quantos]"},
+	{name: "desfazer", description: "Descarta o último gasto salvo"},
+	{name: "exportar", description: "O mês numa planilha CSV", usage: "[2026-10 | tudo]"},
 	{name: "categorias", description: "As categorias de gasto"},
+	{name: "cost", description: "Quanto as leituras custaram"},
 	{name: "help", description: "O que este bot sabe fazer"},
+}
+
+func (c command) menuDescription() string {
+	if c.usage == "" {
+		return c.description
+	}
+	return c.description + " · " + c.usage
 }
 
 func parseCommand(text string) (name, target, rest string) {
@@ -40,7 +55,11 @@ func helpText() string {
 		"• ou uma linha de texto: <i>almoço 35,90 no pix</i>\n\n" +
 		"Eu salvo na hora e mostro o que li. Se algo estiver errado, toque em Descartar e mande de novo.\n\n")
 	for _, c := range commands {
-		b.WriteString("/" + c.name + " — " + html.EscapeString(c.description) + "\n")
+		line := "/" + c.name
+		if c.usage != "" {
+			line += " " + c.usage
+		}
+		b.WriteString(html.EscapeString(line) + " — " + html.EscapeString(c.description) + "\n")
 	}
 	return b.String()
 }
