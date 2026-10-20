@@ -35,6 +35,8 @@ type Expense struct {
 	MerchantTaxID string
 	Category      string
 	PaymentMethod string
+	Account       string
+	CardLast4     string
 	TotalCents    int64
 	Currency      string
 	Description   string
@@ -63,7 +65,7 @@ func (e *DuplicateError) Error() string {
 func (e *DuplicateError) Is(target error) bool { return target == ErrDuplicate }
 
 const expenseColumns = `id, user_id, status, spent_on, spent_time, merchant, merchant_tax_id, category,
-	payment_method, total_cents, currency, description, nfce_key, source, attachment_id,
+	payment_method, account, card_last4, total_cents, currency, description, nfce_key, source, attachment_id,
 	created_at, updated_at, confirmed_at`
 
 type querier interface {
@@ -106,10 +108,12 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 			confirmedAt = now
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO expenses (user_id, status, spent_on, spent_time, merchant,
-			merchant_tax_id, category, payment_method, total_cents, currency, description, nfce_key, source,
-			attachment_id, created_at, updated_at, confirmed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			merchant_tax_id, category, payment_method, account, card_last4, total_cents, currency, description,
+			nfce_key, source, attachment_id, created_at, updated_at, confirmed_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			e.UserID, e.Status, e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID,
-			e.Category, nullString(e.PaymentMethod), e.TotalCents, e.Currency, e.Description,
+			e.Category, nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
+			e.Description,
 			nullString(e.NFCeKey), e.Source, nullInt(e.AttachmentID), now, now, confirmedAt)
 		if err != nil {
 			return err
@@ -249,10 +253,12 @@ func (s *Store) UpdateExpense(ctx context.Context, userID int64, e Expense) (Exp
 		}
 
 		res, err := tx.ExecContext(ctx, `UPDATE expenses SET spent_on = ?, spent_time = ?, merchant = ?,
-			merchant_tax_id = ?, category = ?, payment_method = ?, total_cents = ?, currency = ?, description = ?,
-			nfce_key = ?, updated_at = ? WHERE id = ? AND user_id = ? AND status != 'discarded'`,
+			merchant_tax_id = ?, category = ?, payment_method = ?, account = ?, card_last4 = ?, total_cents = ?,
+			currency = ?, description = ?, nfce_key = ?, updated_at = ?
+			WHERE id = ? AND user_id = ? AND status != 'discarded'`,
 			e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID, e.Category,
-			nullString(e.PaymentMethod), e.TotalCents, e.Currency, e.Description, nullString(e.NFCeKey),
+			nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
+			e.Description, nullString(e.NFCeKey),
 			s.timestamp(), e.ID, userID)
 		if err != nil {
 			return err
@@ -335,11 +341,12 @@ func scanExpense(row interface{ Scan(...any) error }) (Expense, error) {
 		e                           Expense
 		spentOn                     string
 		spentTime, payment, nfce    sql.NullString
+		card                        sql.NullString
 		created, updated, confirmed sql.NullString
 		attachment                  sql.NullInt64
 	)
 	err := row.Scan(&e.ID, &e.UserID, &e.Status, &spentOn, &spentTime, &e.Merchant, &e.MerchantTaxID,
-		&e.Category, &payment, &e.TotalCents, &e.Currency, &e.Description, &nfce, &e.Source, &attachment,
+		&e.Category, &payment, &e.Account, &card, &e.TotalCents, &e.Currency, &e.Description, &nfce, &e.Source, &attachment,
 		&created, &updated, &confirmed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Expense{}, ErrNotFound
@@ -351,7 +358,7 @@ func scanExpense(row interface{ Scan(...any) error }) (Expense, error) {
 	if e.SpentOn, err = time.ParseInLocation(dateLayout, spentOn, time.Local); err != nil {
 		return Expense{}, err
 	}
-	e.SpentTime, e.PaymentMethod, e.NFCeKey = spentTime.String, payment.String, nfce.String
+	e.SpentTime, e.PaymentMethod, e.NFCeKey, e.CardLast4 = spentTime.String, payment.String, nfce.String, card.String
 	e.AttachmentID = attachment.Int64
 	if e.CreatedAt, err = parseTimestamp(created); err != nil {
 		return Expense{}, err

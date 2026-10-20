@@ -152,3 +152,24 @@ func TestSendDigests(t *testing.T) {
 		t.Error("a user who blocked the bot is asked every ten minutes for a week")
 	}
 }
+
+func TestMonthDigestAccounts(t *testing.T) {
+	b, user := testBot(t, answering(pharmacy()))
+	seedMonths(t, b, user)
+	september, _ := parseMonth("setembro", fixed)
+	if text, _, _ := b.monthDigest(ctx, user.ID, september, fixed); strings.Contains(text, "Contas") {
+		t.Errorf("no account is known, and the digest has a section for them:\n%s", text)
+	}
+
+	list, _ := b.store.Find(ctx, user.ID, store.Filter{From: september.from, To: september.to}, true, 2)
+	for i, account := range []string{"Nubank", "Inter"} {
+		list[i].Account = account
+		if _, err := b.store.UpdateExpense(ctx, user.ID, list[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	text, _, _ := b.monthDigest(ctx, user.ID, september, fixed)
+	if !strings.Contains(text, "<b>Contas</b>\nNubank R$ 250,00 · Inter R$ 120,00 · não informada R$ 18,00") {
+		t.Errorf("the accounts:\n%s", text)
+	}
+}

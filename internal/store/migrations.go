@@ -131,4 +131,8 @@ CREATE TABLE digests (
     PRIMARY KEY (user_id, month)
 );
 `},
+	{name: "0005_payment_account", sql: `
+ALTER TABLE expenses ADD COLUMN account TEXT NOT NULL DEFAULT '';
+ALTER TABLE expenses ADD COLUMN card_last4 TEXT CHECK (card_last4 GLOB '[0-9][0-9][0-9][0-9]');
+`},
 }

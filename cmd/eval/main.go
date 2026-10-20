@@ -32,6 +32,8 @@ type expected struct {
 	Date          string `json:"date"`
 	Total         string `json:"total"`
 	PaymentMethod string `json:"payment_method"`
+	Account       string `json:"payment_account"`
+	CardLast4     string `json:"card_last4"`
 	Category      string `json:"category"`
 	NFCeAccessKey string `json:"nfce_access_key"`
 }
@@ -53,6 +55,13 @@ var fields = []field{
 	{"merchant", func(w, g expected) (bool, bool) {
 		want, got := letters(w.Merchant), letters(g.Merchant)
 		return want != "" && got != "" && (strings.Contains(got, want) || strings.Contains(want, got)), w.Merchant != ""
+	}},
+	{"account", func(w, g expected) (bool, bool) {
+		want, got := letters(w.Account), letters(g.Account)
+		return want != "" && got != "" && (strings.Contains(got, want) || strings.Contains(want, got)), w.Account != ""
+	}},
+	{"card", func(w, g expected) (bool, bool) {
+		return letters(w.CardLast4) == letters(g.CardLast4), w.CardLast4 != ""
 	}},
 	{"cnpj", func(w, g expected) (bool, bool) {
 		return letters(w.MerchantTaxID) == letters(g.MerchantTaxID), w.MerchantTaxID != ""
@@ -124,8 +133,9 @@ func main() {
 		res, err := x.Extract(ctx, extract.Input{MIME: types[strings.ToLower(filepath.Ext(file))], Data: data, Today: time.Now()})
 		usd += res.Spend.USD
 		read++
-		got := expected{res.Raw.Merchant, res.Raw.MerchantTaxID, res.Raw.Date, res.Raw.Total, res.Raw.PaymentMethod,
-			res.Raw.Category, res.Raw.NFCeAccessKey}
+		got := expected{Merchant: res.Raw.Merchant, MerchantTaxID: res.Raw.MerchantTaxID, Date: res.Raw.Date,
+			Total: res.Raw.Total, PaymentMethod: res.Raw.PaymentMethod, Account: res.Raw.PaymentAccount,
+			CardLast4: res.Raw.CardLast4, Category: res.Raw.Category, NFCeAccessKey: res.Raw.NFCeAccessKey}
 
 		if *initMode {
 			if err != nil {
@@ -223,7 +233,8 @@ func receipts(dir string) ([]string, error) {
 
 func show(name string, e expected) string {
 	v := map[string]string{"total": e.Total, "date": e.Date, "payment": e.PaymentMethod, "category": e.Category,
-		"merchant": e.Merchant, "cnpj": e.MerchantTaxID, "nfce": e.NFCeAccessKey}[name]
+		"merchant": e.Merchant, "account": e.Account, "card": e.CardLast4, "cnpj": e.MerchantTaxID,
+		"nfce": e.NFCeAccessKey}[name]
 	return fmt.Sprintf("%q", v)
 }
 

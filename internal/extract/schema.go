@@ -49,7 +49,7 @@ func schema(categories []Category) (json.RawMessage, error) {
 		"is_receipt":         map[string]any{"type": "boolean", "description": "false when nothing here records a purchase or payment with an amount"},
 		"not_receipt_reason": str("when is_receipt is false, why, in one short Brazilian Portuguese sentence; otherwise empty"),
 		"merchant":           str("who was paid: the trade name as printed, else the legal name; for a transfer, the recipient"),
-		"merchant_tax_id":    str("the merchant's or recipient's CNPJ or CPF, letters and digits only, no punctuation; empty when absent"),
+		"merchant_tax_id":    str("the merchant's or recipient's CNPJ or CPF, letters and digits only, no punctuation — never the bank's or payment institution's that issued the receipt; empty when absent"),
 		"date":               str("the date of the purchase or payment, YYYY-MM-DD; empty when unknown"),
 		"time":               str("the time of the purchase or payment, HH:MM in 24 hours; empty when not shown"),
 		"total":              str(`the amount actually paid, after discounts, decimal with a dot and two decimals and no thousands separator, e.g. "1234.50"`),
@@ -59,6 +59,10 @@ func schema(categories []Category) (json.RawMessage, error) {
 			"enum":        append([]string{""}, receipt.PaymentMethods...),
 			"description": "credito for credit card, debito for debit card, vale for meal or food vouchers; empty when not shown",
 		},
+		"payment_account": str("the bank, card issuer, wallet or benefits card the money came from, by its everyday name — " +
+			"Nubank (not Nu Pagamentos), Inter, Itaú, Bradesco, Santander, Caixa, C6, PicPay, Mercado Pago, Caju, Flash, VR, Alelo; " +
+			"empty when the receipt does not show it"),
+		"card_last4": str("the last four digits of the card used, when printed (•••• 1234, final 1234); empty otherwise"),
 		"category": map[string]any{
 			"type":        "string",
 			"enum":        slugs,

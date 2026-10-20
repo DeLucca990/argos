@@ -235,12 +235,12 @@ func (b *Bot) exportCSV(ctx context.Context, userID int64, arg string, now time.
 	buf.WriteString("\ufeff")
 	w := csv.NewWriter(&buf)
 	w.Comma = ';'
-	w.Write([]string{"data", "hora", "estabelecimento", "cnpj_cpf", "categoria", "pagamento", "valor", "moeda",
-		"descricao", "origem", "id"})
+	w.Write([]string{"data", "hora", "estabelecimento", "cnpj_cpf", "categoria", "pagamento", "conta", "cartao_final",
+		"valor", "moeda", "descricao", "origem", "id"})
 	for _, e := range list {
 		w.Write([]string{
 			e.SpentOn.Format("02/01/2006"), e.SpentTime, cell(e.Merchant), e.MerchantTaxID,
-			b.cats[e.Category].Label, paymentLabels[e.PaymentMethod], decimal(e.TotalCents), e.Currency,
+			b.cats[e.Category].Label, paymentLabels[e.PaymentMethod], cell(e.Account), e.CardLast4, decimal(e.TotalCents), e.Currency,
 			cell(e.Description), sourceLabels[e.Source], strconv.FormatInt(e.ID, 10),
 		})
 	}

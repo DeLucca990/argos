@@ -116,6 +116,7 @@ func TestParseWarns(t *testing.T) {
 	in.NFCeAccessKey = strings.Repeat("1", 44)
 	in.Currency = "USD"
 	in.PaymentMethod = "cheque"
+	in.CardLast4 = "12345"
 
 	r, err := Parse(in, today)
 	if err != nil {
@@ -127,7 +128,7 @@ func TestParseWarns(t *testing.T) {
 			t.Errorf("no warning mentioning %q:\n%s", want, joined)
 		}
 	}
-	if r.NFCeKey != "" || r.SpentTime != "" || r.PaymentMethod != "" {
+	if r.NFCeKey != "" || r.SpentTime != "" || r.PaymentMethod != "" || r.CardLast4 != "" {
 		t.Errorf("invalid values were kept: key %q, time %q, payment %q", r.NFCeKey, r.SpentTime, r.PaymentMethod)
 	}
 	if !r.SpentOn.Equal(time.Date(2026, 10, 20, 0, 0, 0, 0, time.Local)) {
@@ -152,6 +153,18 @@ func TestParseRefuses(t *testing.T) {
 		in.Total = total
 		if _, err := Parse(in, today); !errors.Is(err, ErrNoTotal) {
 			t.Errorf("total %q: %v", total, err)
+		}
+	}
+}
+
+func TestParseAccountAndCard(t *testing.T) {
+	for card, want := range map[string]string{"1234": "1234", "••••1234": "1234", "final 1234": "1234", " 1234 ": "1234",
+		"123": "", "12345": "", "": "", "abcd": ""} {
+		in := raw()
+		in.PaymentAccount, in.CardLast4 = "  Nubank ", card
+		r, err := Parse(in, today)
+		if err != nil || r.Account != "Nubank" || r.CardLast4 != want {
+			t.Errorf("card %q: account %q, card %q, %v; want %q", card, r.Account, r.CardLast4, err, want)
 		}
 	}
 }

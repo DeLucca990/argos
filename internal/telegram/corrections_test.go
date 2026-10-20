@@ -112,3 +112,42 @@ func TestRawFromRoundTrips(t *testing.T) {
 		t.Errorf("round trip:\n%+v\n%+v", e, back)
 	}
 }
+
+func TestAccountAndCardOnTheCard(t *testing.T) {
+	raw := pharmacy()
+	raw.PaymentAccount, raw.CardLast4 = "Nubank", "final 1234"
+	fx := answering(raw)
+	moved := raw
+	moved.PaymentAccount, moved.CardLast4 = "Inter", "9876"
+	fx.fixed = answer(moved, 0.01)
+	b, user := testBot(t, fx)
+
+	card := b.read(ctx, user, incoming{data: photo, mime: "image/jpeg", source: store.SourcePhoto})
+	if !strings.Contains(card.text, "💳 Débito · Nubank ···1234") {
+		t.Errorf("the card:\n%s", card.text)
+	}
+	saved, _ := b.store.Expense(ctx, 1)
+	if c := rawFrom(saved); c.PaymentAccount != "Nubank" || c.CardLast4 != "1234" {
+		t.Errorf("a correction is shown %+v", c)
+	}
+
+	r, _ := b.correct(ctx, user, 1, "foi no cartão do Inter, final 9876")
+	if !strings.Contains(r.text, "pagamento: Débito · Nubank ···1234 → Débito · Inter ···9876") {
+		t.Errorf("the correction:\n%s", r.text)
+	}
+
+	_, data, _, _ := b.exportCSV(ctx, user.ID, "outubro", fixed)
+	if !strings.Contains(string(data), ";Débito;Inter;9876;42,30;") {
+		t.Errorf("the CSV:\n%s", data)
+	}
+
+	e, _ := b.store.Expense(ctx, 1)
+	e.PaymentMethod, e.CardLast4 = "", ""
+	if got := paidWith(e); got != "Inter" {
+		t.Errorf("an account alone: %q", got)
+	}
+	e.Account = ""
+	if got := paidWith(e); got != "" {
+		t.Errorf("nothing known: %q", got)
+	}
+}

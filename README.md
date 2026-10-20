@@ -144,7 +144,7 @@ model would infer. The bot answers "🔎 Lendo…" and turns that message into a
 ```
 🧾 Drogaria Boa Saúde
 CNPJ 11.222.333/0001-81
-📅 19/10/2026 às 10:15 · 💳 Débito
+📅 19/10/2026 às 10:15 · 💳 Débito · Nubank ···1234
 💊 Farmácia
 💰 R$ 42,30
 
@@ -185,6 +185,13 @@ What the card warns about is checked in code, not by the model: a CNPJ or CPF wh
 digits do not match (alphanumeric CNPJs included), an NFC-e access key that does not, items that
 do not add up to the total, a date in the future or over a year old, a currency other than reais,
 and no date at all — then today is used. What the model itself was unsure of comes as 📝.
+
+**Where the money came from.** Besides the payment method, the card shows the account — the
+bank, card, wallet or benefits card the receipt names, by its everyday name: *Nubank*, not *Nu
+Pagamentos S.A.* — and the card's last four digits when they are printed. Either is empty when
+the receipt does not show it, and both can be corrected by replying to the card (*foi no cartão
+do Inter, final 9876*). The bank's own CNPJ, printed on a statement screenshot, is never taken
+for the merchant's. Expenses read before the field existed have no account.
 
 **The same receipt twice** is caught two ways: the same file by its sha256, before any model is
 called, and the same purchase photographed again by the 44-character NFC-e access key printed on
@@ -240,8 +247,8 @@ person in `TELEGRAM_ALLOWED_USER_IDS` sees what they sent.
 
 **The CSV** is made for a spreadsheet in Portuguese: `;` between columns, a decimal comma
 (`87,40`), dates as `20/10/2026`, and a byte-order mark so Excel reads the accents. One row per
-expense — date, time, merchant, CNPJ or CPF, category, payment method, amount, currency,
-description, where it came from and its id. Merchant names and descriptions were read off
+expense — date, time, merchant, CNPJ or CPF, category, payment method, account, the card's last
+four digits, amount, currency, description, where it came from and its id. Merchant names and descriptions were read off
 receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a planted
 `=HYPERLINK(…)` arrives as text instead of running as a formula when the file opens.
 
@@ -308,7 +315,7 @@ each scoped to the asker's saved expenses:
 | `search_items` | the item lines of receipts that listed them — *cerveja*, *gasolina* — with their sum |
 
 Each takes the same filters: a date range, a category, part of a merchant's name, a payment
-method, a minimum and a maximum. There is no free-form SQL: what Claude can ask the database is
+method, an account — *quanto gastei no Nubank em outubro?* — a minimum and a maximum. There is no free-form SQL: what Claude can ask the database is
 exactly these three questions, and someone else's expenses are not among the answers. Every
 figure in a reply comes from a tool — the prompt forbids estimating one — and the merchant names
 and item lines it reads are treated as data, since they came off receipts.
@@ -386,7 +393,7 @@ instead of skipping a step.
 | Table | Holds |
 | --- | --- |
 | `users` | everyone who has used the bot: their Telegram id, and the name and username their latest message carried |
-| `expenses` | one purchase: when, where, category, payment method, total in cents, and its status — `confirmed` once read, `discarded` when you discard it; `pending` is for an expense still awaiting a decision, which the bot does not create today |
+| `expenses` | one purchase: when, where, category, payment method, the account paid from and the card's last four digits, total in cents, and its status — `confirmed` once read, `discarded` when you discard it; `pending` is for an expense still awaiting a decision, which the bot does not create today |
 | `expense_items` | the lines of a receipt, in order |
 | `attachments` | the files received, by sha256, so the same file is kept once |
 | `extractions` | every call to the model: its raw answer, tokens and estimated cost |

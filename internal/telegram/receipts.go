@@ -209,7 +209,7 @@ func (b *Bot) expenseFrom(r receipt.Receipt, userID int64, source store.Source, 
 	}
 	return store.Expense{
 		UserID: userID, SpentOn: r.SpentOn, SpentTime: r.SpentTime, Merchant: r.Merchant,
-		MerchantTaxID: r.MerchantTaxID, Category: category, PaymentMethod: r.PaymentMethod,
+		MerchantTaxID: r.MerchantTaxID, Category: category, PaymentMethod: r.PaymentMethod, Account: r.Account, CardLast4: r.CardLast4,
 		TotalCents: r.TotalCents, Currency: r.Currency, Description: r.Description, NFCeKey: r.NFCeKey,
 		Source: source, AttachmentID: attachmentID, Items: items, Status: store.Confirmed,
 	}

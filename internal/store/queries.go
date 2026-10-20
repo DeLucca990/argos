@@ -12,6 +12,7 @@ type Filter struct {
 	Category      string
 	Merchant      string
 	PaymentMethod string
+	Account       string
 	MinCents      int64
 	MaxCents      int64
 }
@@ -35,13 +36,14 @@ var groupings = map[string]string{
 	"category":       "c.label",
 	"merchant":       "COALESCE(NULLIF(e.merchant, ''), NULLIF(e.description, ''), '(sem nome)')",
 	"payment_method": "COALESCE(e.payment_method, '')",
+	"account":        "e.account",
 	"day":            "e.spent_on",
 	"week":           "date(e.spent_on, '-6 days', 'weekday 1')",
 	"month":          "substr(e.spent_on, 1, 7)",
 }
 
 func Groupings() []string {
-	return []string{"none", "category", "merchant", "payment_method", "day", "week", "month"}
+	return []string{"none", "category", "merchant", "payment_method", "account", "day", "week", "month"}
 }
 
 func (f Filter) where(userID int64) (string, []any) {
@@ -51,12 +53,16 @@ func (f Filter) where(userID int64) (string, []any) {
 		clauses, args = append(clauses, "e.category = ?"), append(args, f.Category)
 	}
 	if f.Merchant != "" {
-		like := "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(f.Merchant) + "%"
+		pattern := like(f.Merchant)
 		clauses = append(clauses, `(e.merchant LIKE ? ESCAPE '\' OR e.description LIKE ? ESCAPE '\')`)
-		args = append(args, like, like)
+		args = append(args, pattern, pattern)
 	}
 	if f.PaymentMethod != "" {
 		clauses, args = append(clauses, "e.payment_method = ?"), append(args, f.PaymentMethod)
+	}
+	if f.Account != "" {
+		clauses = append(clauses, `e.account LIKE ? ESCAPE '\'`)
+		args = append(args, like(f.Account))
 	}
 	if f.MinCents != 0 {
 		clauses, args = append(clauses, "e.total_cents >= ?"), append(args, f.MinCents)
@@ -107,11 +113,11 @@ func (s *Store) Find(ctx context.Context, userID int64, f Filter, byTotal bool, 
 
 func (s *Store) SearchItems(ctx context.Context, userID int64, text string, f Filter, limit int) ([]ItemMatch, error) {
 	where, args := f.where(userID)
-	like := "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(text) + "%"
+	pattern := like(text)
 	rows, err := s.db.QueryContext(ctx, `SELECT e.id, e.spent_on, e.merchant, e.category, i.description, i.quantity,
 		COALESCE(i.unit_cents, 0), i.total_cents FROM expense_items i JOIN expenses e ON e.id = i.expense_id
 		WHERE `+where+` AND i.description LIKE ? ESCAPE '\' ORDER BY e.spent_on DESC, e.id DESC, i.position LIMIT ?`,
-		append(args, like, limit)...)
+		append(args, pattern, limit)...)
 	if err != nil {
 		return nil, err
 	}
@@ -133,4 +139,8 @@ func (s *Store) SearchItems(ctx context.Context, userID int64, text string, f Fi
 		matches = append(matches, m)
 	}
 	return matches, rows.Err()
+}
+
+func like(s string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(s) + "%"
 }

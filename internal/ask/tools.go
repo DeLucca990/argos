@@ -36,6 +36,7 @@ type filterArgs struct {
 	Category      string `json:"category"`
 	Merchant      string `json:"merchant"`
 	PaymentMethod string `json:"payment_method"`
+	Account       string `json:"account"`
 	MinTotal      string `json:"min_total"`
 	MaxTotal      string `json:"max_total"`
 }
@@ -61,6 +62,7 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 			"category":       map[string]any{"type": "string", "enum": slugs, "description": "only this category"},
 			"merchant":       str("only expenses whose merchant or description contains this, ignoring case"),
 			"payment_method": map[string]any{"type": "string", "enum": []any{"pix", "credito", "debito", "dinheiro", "boleto", "vale", "outro"}},
+			"account":        str("only expenses paid from this bank, card or wallet — Nubank, Inter, Caju — ignoring case"),
 			"min_total":      str(`only expenses of at least this many reais, e.g. "100.00"`),
 			"max_total":      str(`only expenses of at most this many reais`),
 		}
@@ -76,7 +78,7 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 
 	t.params = []anthropic.BetaToolUnionParam{
 		tool("list_expenses", "Lists individual expenses matching the filters: date, time, merchant, category, "+
-			"payment method, total and description. For the biggest ones, order_by total.",
+			"payment method, the account and card's last four digits when known, total and description. For the biggest ones, order_by total.",
 			filters(map[string]any{
 				"order_by": map[string]any{"type": "string", "enum": []any{"date", "total"}, "description": "newest first, or largest first"},
 				"limit":    map[string]any{"type": "integer", "description": fmt.Sprintf("how many, %d unless set, at most %d", defaultRows, maxRows)},
@@ -89,7 +91,7 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 				"limit": map[string]any{"type": "integer", "description": fmt.Sprintf("how many lines, at most %d", maxRows)},
 			}), []string{"text"}),
 		tool("spending_totals", "Sums the expenses matching the filters, overall or grouped: by category, "+
-			"merchant, payment method, day, week (keyed by its Monday) or month. Each group comes with its total, "+
+			"merchant, payment method, account (the bank, card or wallet paid from), day, week (keyed by its Monday) or month. Each group comes with its total, "+
 			"its count and its share of the whole.",
 			filters(map[string]any{
 				"group_by": map[string]any{"type": "string", "enum": groupBy, "description": "none for a single total"},
@@ -154,7 +156,7 @@ func (t *tools) filter(a filterArgs, now time.Time) (store.Filter, error) {
 	f := store.Filter{
 		From:     time.Date(1, 1, 1, 0, 0, 0, 0, loc),
 		To:       time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc),
-		Merchant: strings.TrimSpace(a.Merchant), PaymentMethod: a.PaymentMethod,
+		Merchant: strings.TrimSpace(a.Merchant), PaymentMethod: a.PaymentMethod, Account: strings.TrimSpace(a.Account),
 	}
 	if a.From != "" {
 		d, err := time.ParseInLocation("2006-01-02", a.From, loc)
@@ -221,8 +223,11 @@ func (t *tools) totals(ctx context.Context, userID int64, f store.Filter, groupB
 	if groupBy != "none" {
 		for _, g := range groups {
 			key := g.Key
-			if groupBy == "payment_method" {
+			switch {
+			case groupBy == "payment_method":
 				key = paymentLabels[key]
+			case groupBy == "account" && key == "":
+				key = "não informada"
 			}
 			out.Groups = append(out.Groups, groupOut{Key: key, Total: receipt.FormatBRL(g.TotalCents), Count: g.Count,
 				Share: fmt.Sprintf("%d%%", (g.TotalCents*100+total/2)/max(total, 1))})
@@ -238,6 +243,8 @@ type expenseOut struct {
 	Merchant    string `json:"merchant"`
 	Category    string `json:"category"`
 	Payment     string `json:"payment"`
+	Account     string `json:"account,omitempty"`
+	Card        string `json:"card_last4,omitempty"`
 	Total       string `json:"total"`
 	Description string `json:"description,omitempty"`
 }
@@ -258,7 +265,7 @@ func (t *tools) list(ctx context.Context, userID int64, f store.Filter, byTotal 
 		}
 		out.Expenses = append(out.Expenses, expenseOut{
 			ID: e.ID, Date: e.SpentOn.Format("2006-01-02"), Time: e.SpentTime, Merchant: e.Merchant,
-			Category: t.cats[e.Category].Label, Payment: paymentLabels[e.PaymentMethod],
+			Category: t.cats[e.Category].Label, Payment: paymentLabels[e.PaymentMethod], Account: e.Account, Card: e.CardLast4,
 			Total: money(e.TotalCents, e.Currency), Description: e.Description,
 		})
 	}

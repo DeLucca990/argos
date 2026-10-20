@@ -198,6 +198,24 @@ func (b *Bot) monthDigest(ctx context.Context, userID int64, p period, now time.
 		parts = append(parts, label+" "+receipt.FormatBRL(g.TotalCents))
 	}
 	s.WriteString("\n<b>Pagamento</b>\n" + strings.Join(parts, " · "))
+
+	accounts, err := b.store.Totals(ctx, userID, store.Filter{From: p.from, To: p.to}, "account")
+	if err != nil {
+		return "", 0, err
+	}
+	parts, known := nil, false
+	for _, g := range accounts {
+		label := g.Key
+		if label == "" {
+			label = "não informada"
+		} else {
+			known = true
+		}
+		parts = append(parts, html.EscapeString(label)+" "+receipt.FormatBRL(g.TotalCents))
+	}
+	if known {
+		s.WriteString("\n\n<b>Contas</b>\n" + strings.Join(parts, " · "))
+	}
 	return s.String(), count, nil
 }
 

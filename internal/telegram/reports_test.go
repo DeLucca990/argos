@@ -137,13 +137,13 @@ func TestExportCSV(t *testing.T) {
 		t.Fatalf("%s, %d rows, %v", name, rows, err)
 	}
 	text := string(data)
-	if !strings.HasPrefix(text, "\ufeffdata;hora;estabelecimento;cnpj_cpf;categoria;pagamento;valor;moeda;descricao;origem;id\n") {
+	if !strings.HasPrefix(text, "\ufeffdata;hora;estabelecimento;cnpj_cpf;categoria;pagamento;conta;cartao_final;valor;moeda;descricao;origem;id\n") {
 		t.Errorf("header:\n%s", text)
 	}
 	for _, want := range []string{
-		`20/10/2026;12:30;"'=HYPERLINK(""x"")";;Mercado;Crédito;87,40;BRL;;foto;`,
-		"20/10/2026;08:10;Padaria Pão Quente;;Restaurante;Pix;15,00;BRL;;foto;",
-		"13/10/2026;;Posto Shell;;Combustível;Débito;200,00;BRL;;foto;",
+		`20/10/2026;12:30;"'=HYPERLINK(""x"")";;Mercado;Crédito;;;87,40;BRL;;foto;`,
+		"20/10/2026;08:10;Padaria Pão Quente;;Restaurante;Pix;;;15,00;BRL;;foto;",
+		"13/10/2026;;Posto Shell;;Combustível;Débito;;;200,00;BRL;;foto;",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the CSV lacks %q:\n%s", want, text)

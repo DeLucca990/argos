@@ -87,8 +87,8 @@ func (b *Bot) cardText(e store.Expense, d details) string {
 	if e.SpentTime != "" {
 		when += " às " + e.SpentTime
 	}
-	if label, ok := paymentLabels[e.PaymentMethod]; ok {
-		when += " · 💳 " + label
+	if paid := paidWith(e); paid != "" {
+		when += " · 💳 " + html.EscapeString(paid)
 	}
 	s.WriteString(when + "\n")
 
@@ -227,4 +227,19 @@ func nonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func paidWith(e store.Expense) string {
+	var parts []string
+	if label, ok := paymentLabels[e.PaymentMethod]; ok {
+		parts = append(parts, label)
+	}
+	account := e.Account
+	if e.CardLast4 != "" {
+		account = strings.TrimSpace(account + " ···" + e.CardLast4)
+	}
+	if account != "" {
+		parts = append(parts, account)
+	}
+	return strings.Join(parts, " · ")
 }

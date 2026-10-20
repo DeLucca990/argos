@@ -115,3 +115,40 @@ func TestFindAndSearchItems(t *testing.T) {
 		t.Errorf("items outside the dates: %+v", none)
 	}
 }
+
+func TestAccountAndCard(t *testing.T) {
+	s := open(t)
+	e := expense(me, "2026-10-18", 1000, "mercado")
+	e.Account, e.CardLast4, e.Status = "Nubank", "1234", Confirmed
+	id := add(t, s, e)
+	other := expense(me, "2026-10-19", 500, "mercado")
+	other.Account, other.Status = "Inter", Confirmed
+	add(t, s, other)
+	add(t, s, Expense{UserID: me, SpentOn: day("2026-10-19"), TotalCents: 200, Category: "outros", Source: SourceText, Status: Confirmed})
+
+	got, err := s.Expense(ctx, id)
+	if err != nil || got.Account != "Nubank" || got.CardLast4 != "1234" {
+		t.Errorf("round trip: %+v, %v", got, err)
+	}
+	if bare, _ := s.Expense(ctx, 3); bare.Account != "" || bare.CardLast4 != "" {
+		t.Errorf("an expense with neither: %+v", bare)
+	}
+
+	got.Account, got.CardLast4 = "Itaú", "9876"
+	if fixed, err := s.UpdateExpense(ctx, me, got); err != nil || fixed.Account != "Itaú" || fixed.CardLast4 != "9876" {
+		t.Errorf("update: %+v, %v", fixed, err)
+	}
+	got.CardLast4 = "12345"
+	if _, err := s.UpdateExpense(ctx, me, got); err == nil {
+		t.Error("five digits were accepted as the last four")
+	}
+
+	october := Filter{From: day("2026-10-01"), To: day("2026-11-01")}
+	if g, _ := s.Totals(ctx, me, october, "account"); groups(g) != "Itaú=1000/1 Inter=500/1 =200/1" {
+		t.Errorf("by account: %s", groups(g))
+	}
+	october.Account = "inter"
+	if g, _ := s.Totals(ctx, me, october, "none"); groups(g) != "=500/1" {
+		t.Errorf("filtered by account: %s", groups(g))
+	}
+}

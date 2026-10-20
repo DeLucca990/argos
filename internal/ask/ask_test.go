@@ -79,16 +79,18 @@ func setup(t *testing.T, responses ...string) (*Asker, *fakeAPI, int64) {
 		on, merchant, category string
 		cents                  int64
 		items                  []store.Item
+		account, card          string
 	}{
-		{user.ID, "2026-09-02", "Supermercado Extra", "mercado", 25000, []store.Item{{Description: "Cerveja Heineken", Quantity: 6, TotalCents: 3300}}},
-		{user.ID, "2026-09-29", "Extra Hiper", "mercado", 12000, nil},
-		{user.ID, "2026-09-15", "Padaria", "restaurante", 1800, nil},
-		{user.ID, "2026-10-05", "Posto Shell", "combustivel", 20000, nil},
-		{other.ID, "2026-09-10", "De outra pessoa", "mercado", 99999, nil},
+		{user.ID, "2026-09-02", "Supermercado Extra", "mercado", 25000, []store.Item{{Description: "Cerveja Heineken", Quantity: 6, TotalCents: 3300}}, "Nubank", "1234"},
+		{user.ID, "2026-09-29", "Extra Hiper", "mercado", 12000, nil, "Inter", ""},
+		{user.ID, "2026-09-15", "Padaria", "restaurante", 1800, nil, "", ""},
+		{user.ID, "2026-10-05", "Posto Shell", "combustivel", 20000, nil, "", ""},
+		{other.ID, "2026-09-10", "De outra pessoa", "mercado", 99999, nil, "Nubank", ""},
 	} {
 		day, _ := time.ParseInLocation("2006-01-02", e.on, time.Local)
 		if _, err := st.AddExpense(ctx, store.Expense{UserID: e.user, SpentOn: day, Merchant: e.merchant, Category: e.category,
-			TotalCents: e.cents, Source: store.SourcePhoto, Items: e.items, Status: store.Confirmed}); err != nil {
+			TotalCents: e.cents, Source: store.SourcePhoto, Items: e.items, Account: e.account, CardLast4: e.card,
+			Status: store.Confirmed}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -207,5 +209,26 @@ func TestTheConversationEndsWhenIdle(t *testing.T) {
 	a.Ask(ctx, user, "depois de uma hora?", now.Add(time.Hour))
 	if n := len(api.requests[1]["messages"].([]any)); n != 1 {
 		t.Errorf("an idle conversation was kept: %d messages", n)
+	}
+}
+
+func TestToolsByAccount(t *testing.T) {
+	a, api, user := setup(t,
+		toolUse("spending_totals", `{"group_by":"account","from":"2026-09-01","to":"2026-09-30"}`),
+		toolUse("list_expenses", `{"account":"nubank"}`),
+		text("ok"),
+	)
+	if _, err := a.Ask(ctx, user, "quanto foi em cada conta?", now); err != nil {
+		t.Fatal(err)
+	}
+	totals, _ := lastToolResult(t, api.requests[1])
+	for _, want := range []string{`"key":"Nubank","total":"R$ 250,00"`, `"key":"Inter","total":"R$ 120,00"`, `"key":"não informada","total":"R$ 18,00"`} {
+		if !strings.Contains(totals, want) {
+			t.Errorf("by account lacks %s:\n%s", want, totals)
+		}
+	}
+	listed, _ := lastToolResult(t, api.requests[2])
+	if !strings.Contains(listed, `"account":"Nubank","card_last4":"1234"`) || strings.Contains(listed, "Extra Hiper") || strings.Contains(listed, "999") {
+		t.Errorf("filtered by account:\n%s", listed)
 	}
 }

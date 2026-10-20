@@ -26,6 +26,8 @@ type Raw struct {
 	Total            string    `json:"total"`
 	Currency         string    `json:"currency"`
 	PaymentMethod    string    `json:"payment_method"`
+	PaymentAccount   string    `json:"payment_account"`
+	CardLast4        string    `json:"card_last4"`
 	Category         string    `json:"category"`
 	Description      string    `json:"description"`
 	NFCeAccessKey    string    `json:"nfce_access_key"`
@@ -48,6 +50,8 @@ type Receipt struct {
 	TotalCents    int64
 	Currency      string
 	PaymentMethod string
+	Account       string
+	CardLast4     string
 	Category      string
 	Description   string
 	NFCeKey       string
@@ -92,6 +96,15 @@ func Parse(raw Raw, today time.Time) (Receipt, error) {
 	}
 	if m := strings.ToLower(strings.TrimSpace(raw.PaymentMethod)); slices.Contains(PaymentMethods, m) {
 		r.PaymentMethod = m
+	}
+	r.Account = strings.TrimSpace(raw.PaymentAccount)
+	if card := strings.Map(func(c rune) rune {
+		if c >= '0' && c <= '9' {
+			return c
+		}
+		return -1
+	}, raw.CardLast4); len(card) == 4 {
+		r.CardLast4 = card
 	}
 	return r, nil
 }

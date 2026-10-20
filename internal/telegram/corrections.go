@@ -112,7 +112,7 @@ func (b *Bot) changes(before, after store.Expense) []string {
 	change("estabelecimento", before.Merchant, after.Merchant)
 	change("CNPJ/CPF", receipt.FormatTaxID(before.MerchantTaxID), receipt.FormatTaxID(after.MerchantTaxID))
 	change("categoria", b.cats[before.Category].Label, b.cats[after.Category].Label)
-	change("pagamento", paymentLabels[before.PaymentMethod], paymentLabels[after.PaymentMethod])
+	change("pagamento", paidWith(before), paidWith(after))
 	change("descrição", before.Description, after.Description)
 	change("chave de acesso", before.NFCeKey, after.NFCeKey)
 	if fmt.Sprint(before.Items) != fmt.Sprint(after.Items) {
@@ -125,7 +125,7 @@ func rawFrom(e store.Expense) receipt.Raw {
 	raw := receipt.Raw{
 		IsReceipt: true, Merchant: e.Merchant, MerchantTaxID: e.MerchantTaxID, Date: e.SpentOn.Format("2006-01-02"),
 		Time: e.SpentTime, Total: dotDecimal(e.TotalCents), Currency: e.Currency, PaymentMethod: e.PaymentMethod,
-		Category: e.Category, Description: e.Description, NFCeAccessKey: e.NFCeKey, Items: []receipt.RawItem{},
+		PaymentAccount: e.Account, CardLast4: e.CardLast4, Category: e.Category, Description: e.Description, NFCeAccessKey: e.NFCeKey, Items: []receipt.RawItem{},
 	}
 	for _, it := range e.Items {
 		unit := ""
