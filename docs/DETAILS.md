@@ -10,6 +10,9 @@ daily budget if given one, and comes with an evaluation to choose its model by.
 
 ## Running it
 
+From a clone of the repository. To install the published image instead, see
+[INSTALL.md](INSTALL.md).
+
 ### 1. @BotFather
 
 1. `/newbot` → a name and a username. The token it answers with is `TELEGRAM_BOT_TOKEN`.
@@ -398,6 +401,7 @@ a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
 | `ARGOS_BACKUP_KEEP` | `14` | how many daily backups to keep in `/data/backups`; `0` turns them off |
 | `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
 | `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files: each is read from memory, and the ones kept before are deleted at startup |
+| `TZ` | `America/Sao_Paulo` | the time zone of dates, `/hoje` and the digest; set in the image |
 | `ARGOS_DATA_DIR` | `/data` | where the `argos-data` volume is mounted; `make run`, outside Docker, sets `./data` |
 | `SQLITE_WEB_PASSWORD` | — | **required** by `make db-web` |
 | `SQLITE_WEB_ADDR` / `SQLITE_WEB_PORT` | `127.0.0.1` / `8081` | where `make db-web` listens on the host |
