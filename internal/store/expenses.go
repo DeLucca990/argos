@@ -64,7 +64,9 @@ func (e *DuplicateError) Error() string {
 
 func (e *DuplicateError) Is(target error) bool { return target == ErrDuplicate }
 
-const expenseColumns = `id, user_id, status, spent_on, spent_time, merchant, merchant_tax_id, category,
+const categorySlug = `(SELECT c.slug FROM categories c WHERE c.id = category_id)`
+
+const expenseColumns = `id, user_id, status, spent_on, spent_time, merchant, merchant_tax_id, ` + categorySlug + `,
 	payment_method, account, card_last4, total_cents, currency, description, nfce_key, source, attachment_id,
 	created_at, updated_at, confirmed_at`
 
@@ -93,7 +95,8 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 		if _, err := user(ctx, tx, e.UserID); err != nil {
 			return err
 		}
-		if err := knownCategory(ctx, tx, e.Category); err != nil {
+		category, err := categoryBySlug(ctx, tx, e.UserID, e.Category)
+		if err != nil {
 			return err
 		}
 		if existing, found, err := duplicateOf(ctx, tx, e); err != nil {
@@ -108,11 +111,11 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 			confirmedAt = now
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO expenses (user_id, status, spent_on, spent_time, merchant,
-			merchant_tax_id, category, payment_method, account, card_last4, total_cents, currency, description,
+			merchant_tax_id, category_id, payment_method, account, card_last4, total_cents, currency, description,
 			nfce_key, source, attachment_id, created_at, updated_at, confirmed_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			e.UserID, e.Status, e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID,
-			e.Category, nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
+			category.ID, nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
 			e.Description,
 			nullString(e.NFCeKey), e.Source, nullInt(e.AttachmentID), now, now, confirmedAt)
 		if err != nil {
@@ -142,15 +145,6 @@ func duplicateOf(ctx context.Context, q querier, e Expense) (Expense, bool, erro
 		return Expense{}, false, nil
 	}
 	return existing, err == nil, err
-}
-
-func knownCategory(ctx context.Context, q querier, slug string) error {
-	var found int
-	err := q.QueryRowContext(ctx, `SELECT 1 FROM categories WHERE slug = ?`, slug).Scan(&found)
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%w: %q", ErrUnknownCategory, slug)
-	}
-	return err
 }
 
 func (s *Store) Expense(ctx context.Context, id int64) (Expense, error) {
@@ -238,7 +232,8 @@ func (s *Store) UpdateExpense(ctx context.Context, userID int64, e Expense) (Exp
 	}
 	var updated Expense
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		if err := knownCategory(ctx, tx, e.Category); err != nil {
+		category, err := categoryBySlug(ctx, tx, userID, e.Category)
+		if err != nil {
 			return err
 		}
 		if e.NFCeKey != "" {
@@ -253,10 +248,10 @@ func (s *Store) UpdateExpense(ctx context.Context, userID int64, e Expense) (Exp
 		}
 
 		res, err := tx.ExecContext(ctx, `UPDATE expenses SET spent_on = ?, spent_time = ?, merchant = ?,
-			merchant_tax_id = ?, category = ?, payment_method = ?, account = ?, card_last4 = ?, total_cents = ?,
+			merchant_tax_id = ?, category_id = ?, payment_method = ?, account = ?, card_last4 = ?, total_cents = ?,
 			currency = ?, description = ?, nfce_key = ?, updated_at = ?
 			WHERE id = ? AND user_id = ? AND status != 'discarded'`,
-			e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID, e.Category,
+			e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID, category.ID,
 			nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
 			e.Description, nullString(e.NFCeKey),
 			s.timestamp(), e.ID, userID)
@@ -281,11 +276,12 @@ func (s *Store) UpdateExpense(ctx context.Context, userID int64, e Expense) (Exp
 func (s *Store) SetCategory(ctx context.Context, userID, id int64, category string) (Expense, error) {
 	var e Expense
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		if err := knownCategory(ctx, tx, category); err != nil {
+		c, err := categoryBySlug(ctx, tx, userID, category)
+		if err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `UPDATE expenses SET category = ?, updated_at = ?
-			WHERE id = ? AND user_id = ? AND status != 'discarded'`, category, s.timestamp(), id, userID)
+		res, err := tx.ExecContext(ctx, `UPDATE expenses SET category_id = ?, updated_at = ?
+			WHERE id = ? AND user_id = ? AND status != 'discarded'`, c.ID, s.timestamp(), id, userID)
 		if err != nil {
 			return err
 		}

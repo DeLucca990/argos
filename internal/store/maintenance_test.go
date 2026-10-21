@@ -15,7 +15,9 @@ func TestAnExistingDatabaseGetsTheNewMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old.SaveUser(ctx, User{TelegramID: 42})
+	if _, err := old.db.Exec(`INSERT INTO users (telegram_id, created_at, last_seen_at) VALUES (42, '2026-10-01T12:00:00Z', '2026-10-01T12:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
 	old.Close()
 
 	s, err := Open(file)

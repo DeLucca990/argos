@@ -157,8 +157,12 @@ func (b *Bot) monthDigest(ctx context.Context, userID int64, p period, now time.
 		s.WriteString("O mesmo que " + html.EscapeString(against) + ".\n")
 	}
 
+	categories, err := b.categories(ctx, userID)
+	if err != nil {
+		return "", 0, err
+	}
 	byLabel := map[string]store.Category{}
-	for _, c := range b.catList {
+	for _, c := range categories {
 		byLabel[c.Label] = c
 	}
 	s.WriteString("\n<b>Por categoria</b>\n")
@@ -182,7 +186,7 @@ func (b *Bot) monthDigest(ctx context.Context, userID int64, p period, now time.
 	}
 	s.WriteString("\n<b>Os maiores</b>\n")
 	for _, e := range top {
-		s.WriteString("• " + e.SpentOn.Format("02/01") + " " + b.line(e) + "\n")
+		s.WriteString("• " + e.SpentOn.Format("02/01") + " " + line(e, categories) + "\n")
 	}
 
 	pays, err := b.store.Totals(ctx, userID, store.Filter{From: p.from, To: p.to}, "payment_method")

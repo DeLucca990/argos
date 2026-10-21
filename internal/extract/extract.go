@@ -37,16 +37,18 @@ Answer with the same JSON, the correction applied and everything else exactly as
 If the message asks for nothing you can apply to the expense, answer the JSON unchanged and say in notes, in Brazilian Portuguese, what you did not understand. Keep is_receipt true.`
 
 type Input struct {
-	MIME  string
-	Data  []byte
-	Text  string
-	Today time.Time
+	MIME       string
+	Data       []byte
+	Text       string
+	Today      time.Time
+	Categories []Category
 }
 
 type Correction struct {
-	Current receipt.Raw
-	Text    string
-	Today   time.Time
+	Current    receipt.Raw
+	Text       string
+	Today      time.Time
+	Categories []Category
 }
 
 type Result struct {
@@ -60,15 +62,10 @@ type Extractor struct {
 	client anthropic.Client
 	model  string
 	effort string
-	schema json.RawMessage
 }
 
-func New(model, effort string, categories []Category, opts ...option.RequestOption) (*Extractor, error) {
-	s, err := schema(categories)
-	if err != nil {
-		return nil, err
-	}
-	return &Extractor{client: anthropic.NewClient(opts...), model: model, effort: effort, schema: s}, nil
+func New(model, effort string, opts ...option.RequestOption) *Extractor {
+	return &Extractor{client: anthropic.NewClient(opts...), model: model, effort: effort}
 }
 
 func Supported(mime string) bool { return imageTypes[mime] || mime == "application/pdf" }
@@ -93,7 +90,7 @@ func (x *Extractor) Extract(ctx context.Context, in Input) (Result, error) {
 		return Result{}, fmt.Errorf("%w: %s", ErrUnsupported, in.MIME)
 	}
 	blocks = append(blocks, anthropic.NewBetaTextBlock(userText(in)))
-	return x.call(ctx, systemPrompt, blocks)
+	return x.call(ctx, systemPrompt, blocks, in.Categories)
 }
 
 func (x *Extractor) Correct(ctx context.Context, c Correction) (Result, error) {
@@ -103,10 +100,17 @@ func (x *Extractor) Correct(ctx context.Context, c Correction) (Result, error) {
 	}
 	text := fmt.Sprintf("Today is %s.\n\nThe expense as recorded:\n\n%s\n\nThe person's correction:\n\n%s",
 		c.Today.Format("Monday, 2006-01-02"), current, strings.TrimSpace(c.Text))
-	return x.call(ctx, correctionPrompt, []anthropic.BetaContentBlockParamUnion{anthropic.NewBetaTextBlock(text)})
+	return x.call(ctx, correctionPrompt, []anthropic.BetaContentBlockParamUnion{anthropic.NewBetaTextBlock(text)}, c.Categories)
 }
 
-func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.BetaContentBlockParamUnion) (Result, error) {
+func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.BetaContentBlockParamUnion, categories []Category) (Result, error) {
+	if len(categories) == 0 {
+		return Result{}, errors.New("there are no categories to file it under")
+	}
+	s, err := schema(categories)
+	if err != nil {
+		return Result{}, err
+	}
 	params := anthropic.BetaMessageNewParams{
 		Model:     x.model,
 		MaxTokens: maxTokens,
@@ -114,7 +118,7 @@ func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.
 		Messages:  []anthropic.BetaMessageParam{anthropic.NewBetaUserMessage(blocks...)},
 		OutputConfig: anthropic.BetaOutputConfigParam{
 			Effort: anthropic.BetaOutputConfigEffort(x.effort),
-			Format: anthropic.BetaJSONOutputFormatParam{Schema: x.schema},
+			Format: anthropic.BetaJSONOutputFormatParam{Schema: s},
 		},
 	}
 	if HasFallbacks(x.model) {

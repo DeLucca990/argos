@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -18,8 +19,6 @@ import (
 	"github.com/DeLucca990/argos-bot/internal/store"
 )
 
-const fallbackCategory = "outros"
-
 type Bot struct {
 	cfg       Config
 	store     *store.Store
@@ -28,28 +27,18 @@ type Bot struct {
 	tg        *bot.Bot
 	notify    func(ctx context.Context, chatID int64, text string) error
 
-	cats    map[string]store.Category
-	catList []store.Category
-	slots   chan struct{}
-	now     func() time.Time
+	slots chan struct{}
+	now   func() time.Time
+
+	pendingMu sync.Mutex
+	pending   map[pendingKey]pending
 }
 
 func New(cfg Config, st *store.Store) (*Bot, error) {
-	b := &Bot{cfg: cfg, store: st, slots: make(chan struct{}, maxConcurrency), now: time.Now}
-	if err := b.loadCategories(context.Background()); err != nil {
-		return nil, err
+	b := &Bot{
+		cfg: cfg, store: st, slots: make(chan struct{}, maxConcurrency), now: time.Now,
+		extractor: extract.New(cfg.Model, cfg.Effort), asker: ask.New(cfg.Model, cfg.Effort, st),
 	}
-
-	var cats []extract.Category
-	for _, c := range b.catList {
-		cats = append(cats, extract.Category{Slug: c.Slug, Label: c.Label})
-	}
-	x, err := extract.New(cfg.Model, cfg.Effort, cats)
-	if err != nil {
-		return nil, err
-	}
-	b.extractor = x
-	b.asker = ask.New(cfg.Model, cfg.Effort, st, b.catList)
 
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, receiptsDir), 0o750); err != nil {
 		return nil, err
@@ -72,21 +61,6 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 	b.tg = tg
 	b.notify = b.deliver
 	return b, nil
-}
-
-func (b *Bot) loadCategories(ctx context.Context) error {
-	cats, err := b.store.Categories(ctx)
-	if err != nil {
-		return fmt.Errorf("reading the categories: %w", err)
-	}
-	b.catList, b.cats = cats, map[string]store.Category{}
-	for _, c := range cats {
-		b.cats[c.Slug] = c
-	}
-	if _, ok := b.cats[fallbackCategory]; !ok {
-		return fmt.Errorf("the categories have no %q, which a receipt that fits none of them goes to", fallbackCategory)
-	}
-	return nil
 }
 
 func (b *Bot) Run(ctx context.Context) {
@@ -196,6 +170,10 @@ const dbErrorText = "⚠️ Não consegui acessar o banco de dados."
 
 func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	if u.CallbackQuery != nil {
+		if strings.HasPrefix(u.CallbackQuery.Data, categoryPrefix) {
+			b.onCategoryCallback(ctx, u.CallbackQuery)
+			return
+		}
 		b.onCallback(ctx, u.CallbackQuery)
 		return
 	}
@@ -204,6 +182,10 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	name, _, rest := parseCommand(msg.Text)
 	if name != "" {
 		b.onCommand(ctx, msg, name, rest)
+		return
+	}
+	if key, p, ok := b.pendingFor(msg); ok {
+		b.onPending(ctx, msg, key, p)
 		return
 	}
 	if id, ok := b.cardFor(ctx, msg); ok {

@@ -50,7 +50,8 @@ func (f Filter) where(userID int64) (string, []any) {
 	clauses := []string{"e.user_id = ?", "e.status = 'confirmed'", "e.spent_on >= ?", "e.spent_on < ?"}
 	args := []any{userID, f.From.Format(dateLayout), f.To.Format(dateLayout)}
 	if f.Category != "" {
-		clauses, args = append(clauses, "e.category = ?"), append(args, f.Category)
+		clauses = append(clauses, "e.category_id = (SELECT id FROM categories WHERE slug = ? AND "+visibleTo+")")
+		args = append(args, f.Category, userID)
 	}
 	if f.Merchant != "" {
 		pattern := like(f.Merchant)
@@ -84,7 +85,7 @@ func (s *Store) Totals(ctx context.Context, userID int64, f Filter, groupBy stri
 	}
 	where, args := f.where(userID)
 	rows, err := s.db.QueryContext(ctx, `SELECT `+key+` AS key, SUM(e.total_cents), COUNT(*)
-		FROM expenses e JOIN categories c ON c.slug = e.category WHERE `+where+` GROUP BY key ORDER BY `+order, args...)
+		FROM expenses e JOIN categories c ON c.id = e.category_id WHERE `+where+` GROUP BY key ORDER BY `+order, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func (s *Store) Find(ctx context.Context, userID int64, f Filter, byTotal bool, 
 func (s *Store) SearchItems(ctx context.Context, userID int64, text string, f Filter, limit int) ([]ItemMatch, error) {
 	where, args := f.where(userID)
 	pattern := like(text)
-	rows, err := s.db.QueryContext(ctx, `SELECT e.id, e.spent_on, e.merchant, e.category, i.description, i.quantity,
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id, e.spent_on, e.merchant, `+categorySlug+`, i.description, i.quantity,
 		COALESCE(i.unit_cents, 0), i.total_cents FROM expense_items i JOIN expenses e ON e.id = i.expense_id
 		WHERE `+where+` AND i.description LIKE ? ESCAPE '\' ORDER BY e.spent_on DESC, e.id DESC, i.position LIMIT ?`,
 		append(args, pattern, limit)...)

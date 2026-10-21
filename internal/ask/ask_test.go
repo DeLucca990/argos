@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -74,6 +75,14 @@ func setup(t *testing.T, responses ...string) (*Asker, *fakeAPI, int64) {
 	t.Cleanup(func() { st.Close() })
 	user, _ := st.SaveUser(ctx, store.User{TelegramID: 42})
 	other, _ := st.SaveUser(ctx, store.User{TelegramID: 7})
+	for _, c := range []struct {
+		user int64
+		cat  store.Category
+	}{{user.ID, store.Category{Label: "Academia", Emoji: "🏋️", Hint: "mensalidade, personal"}}, {other.ID, store.Category{Label: "Cassino"}}} {
+		if _, _, err := st.SaveCategory(ctx, c.user, c.cat); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, e := range []struct {
 		user                   int64
 		on, merchant, category string
@@ -85,6 +94,7 @@ func setup(t *testing.T, responses ...string) (*Asker, *fakeAPI, int64) {
 		{user.ID, "2026-09-29", "Extra Hiper", "mercado", 12000, nil, "Inter", ""},
 		{user.ID, "2026-09-15", "Padaria", "restaurante", 1800, nil, "", ""},
 		{user.ID, "2026-10-05", "Posto Shell", "combustivel", 20000, nil, "", ""},
+		{user.ID, "2026-10-10", "Smart Fit", "academia", 9000, nil, "", ""},
 		{other.ID, "2026-09-10", "De outra pessoa", "mercado", 99999, nil, "Nubank", ""},
 	} {
 		day, _ := time.ParseInLocation("2006-01-02", e.on, time.Local)
@@ -94,12 +104,10 @@ func setup(t *testing.T, responses ...string) (*Asker, *fakeAPI, int64) {
 			t.Fatal(err)
 		}
 	}
-	cats, _ := st.Categories(ctx)
-
 	api := &fakeAPI{responses: responses}
 	srv := httptest.NewServer(api)
 	t.Cleanup(srv.Close)
-	return New("claude-opus-5-5", "low", st, cats, option.WithBaseURL(srv.URL), option.WithAPIKey("test"), option.WithMaxRetries(0)), api, user.ID
+	return New("claude-opus-5-5", "low", st, option.WithBaseURL(srv.URL), option.WithAPIKey("test"), option.WithMaxRetries(0)), api, user.ID
 }
 
 func lastToolResult(t *testing.T, req map[string]any) (string, bool) {
@@ -168,7 +176,7 @@ func TestToolsFilterAndRefuse(t *testing.T) {
 	listed, _ := lastToolResult(t, api.requests[1])
 	if !strings.Contains(listed, `"merchant":"Supermercado Extra"`) || !strings.Contains(listed, `"merchant":"Posto Shell"`) ||
 		strings.Contains(listed, "Padaria") || !strings.Contains(listed, `"truncated":true`) {
-		t.Errorf("list_expenses by total, 2 of 4:\n%s", listed)
+		t.Errorf("list_expenses by total, 2 of 5:\n%s", listed)
 	}
 	items, _ := lastToolResult(t, api.requests[2])
 	if !strings.Contains(items, `"item":"Cerveja Heineken"`) || !strings.Contains(items, `"sum":"R$ 33,00"`) {
@@ -230,5 +238,37 @@ func TestToolsByAccount(t *testing.T) {
 	listed, _ := lastToolResult(t, api.requests[2])
 	if !strings.Contains(listed, `"account":"Nubank","card_last4":"1234"`) || strings.Contains(listed, "Extra Hiper") || strings.Contains(listed, "999") {
 		t.Errorf("filtered by account:\n%s", listed)
+	}
+}
+
+func TestToolsTakeTheUsersOwnCategories(t *testing.T) {
+	a, api, user := setup(t,
+		toolUse("spending_totals", `{"group_by":"none","category":"academia"}`),
+		toolUse("spending_totals", `{"group_by":"none","category":"cassino"}`),
+		text("ok"),
+	)
+	if _, err := a.Ask(ctx, user, "quanto gastei com academia?", now); err != nil {
+		t.Fatal(err)
+	}
+
+	first := api.requests[0]
+	system := first["system"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(system, "academia = Academia (mensalidade, personal)") || strings.Contains(system, "cassino") {
+		t.Errorf("the categories in the system prompt:\n%s", system)
+	}
+	var enum []any
+	for _, tl := range first["tools"].([]any) {
+		props := tl.(map[string]any)["input_schema"].(map[string]any)["properties"].(map[string]any)
+		enum = props["category"].(map[string]any)["enum"].([]any)
+	}
+	if !slices.Contains(enum, any("academia")) || slices.Contains(enum, any("cassino")) || len(enum) != 17 {
+		t.Errorf("the category enum: %v", enum)
+	}
+
+	if totals, _ := lastToolResult(t, api.requests[1]); !strings.Contains(totals, `"total":"R$ 90,00","count":1`) {
+		t.Errorf("their own category:\n%s", totals)
+	}
+	if msg, isError := lastToolResult(t, api.requests[2]); !isError || !strings.Contains(msg, `no category "cassino"`) {
+		t.Errorf("someone else's category: %q, error %v", msg, isError)
 	}
 }

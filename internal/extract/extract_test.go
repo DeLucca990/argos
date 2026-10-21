@@ -25,7 +25,7 @@ import (
 var (
 	ctx        = context.Background()
 	today      = time.Date(2026, 10, 20, 15, 0, 0, 0, time.UTC)
-	categories = []Category{{"mercado", "Mercado"}, {"farmacia", "Farmácia"}, {"outros", "Outros"}}
+	categories = []Category{{"mercado", "Mercado", ""}, {"farmacia", "Farmácia", ""}, {"pet-shop", "Pet Shop", "ração, banho e tosa"}, {"outros", "Outros", ""}}
 )
 
 const answer = `{"is_receipt":true,"not_receipt_reason":"","merchant":"Drogaria Boa Saúde","merchant_tax_id":"11222333000181",
@@ -64,11 +64,7 @@ func message(model, stop, text string) string {
 
 func extractor(t *testing.T, srv *httptest.Server, model string) *Extractor {
 	t.Helper()
-	x, err := New(model, "low", categories, option.WithBaseURL(srv.URL), option.WithAPIKey("test"), option.WithMaxRetries(0))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return x
+	return New(model, "low", option.WithBaseURL(srv.URL), option.WithAPIKey("test"), option.WithMaxRetries(0))
 }
 
 func smallJPEG(t *testing.T, w, h int) []byte {
@@ -94,7 +90,7 @@ func TestExtractImage(t *testing.T) {
 	srv, seen := fake(t, message("claude-opus-5-5", "end_turn", answer))
 	photo := smallJPEG(t, 100, 50)
 
-	res, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{MIME: "image/jpeg", Data: photo, Text: "remédio da vó", Today: today})
+	res, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{MIME: "image/jpeg", Data: photo, Text: "remédio da vó", Today: today, Categories: categories})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,8 +109,9 @@ func TestExtractImage(t *testing.T) {
 	}
 	out := req.body["output_config"].(map[string]any)
 	format := out["format"].(map[string]any)
-	enum := format["schema"].(map[string]any)["properties"].(map[string]any)["category"].(map[string]any)["enum"]
-	if out["effort"] != "low" || format["type"] != "json_schema" || len(enum.([]any)) != 3 {
+	category := format["schema"].(map[string]any)["properties"].(map[string]any)["category"].(map[string]any)
+	if out["effort"] != "low" || format["type"] != "json_schema" || len(category["enum"].([]any)) != 4 ||
+		!strings.Contains(category["description"].(string), "pet-shop = Pet Shop (ração, banho e tosa); outros = Outros") {
 		t.Errorf("output_config: %v", out)
 	}
 	if _, set := req.body["thinking"]; set {
@@ -134,7 +131,7 @@ func TestExtractImage(t *testing.T) {
 
 func TestExtractTextWithoutFallbacks(t *testing.T) {
 	srv, seen := fake(t, message("claude-haiku-5-5", "end_turn", answer))
-	if _, err := extractor(t, srv, "claude-haiku-5-5").Extract(ctx, Input{Text: "almoço 35,90 no pix", Today: today}); err != nil {
+	if _, err := extractor(t, srv, "claude-haiku-5-5").Extract(ctx, Input{Text: "almoço 35,90 no pix", Today: today, Categories: categories}); err != nil {
 		t.Fatal(err)
 	}
 	req := (*seen)[0]
@@ -154,7 +151,7 @@ func TestExtractFailuresKeepTheirCost(t *testing.T) {
 		"not json":   message("claude-opus-5-5", "end_turn", "Desculpe, não consigo."),
 	} {
 		srv, _ := fake(t, response)
-		res, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{Text: "x 1", Today: today})
+		res, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{Text: "x 1", Today: today, Categories: categories})
 		if err == nil || res.Spend.USD == 0 {
 			t.Errorf("%s: err %v, spend %+v", name, err, res.Spend)
 		}
@@ -166,6 +163,9 @@ func TestExtractRefusesUnsupportedFiles(t *testing.T) {
 	_, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{MIME: "image/heic", Data: []byte("x"), Today: today})
 	if !errors.Is(err, ErrUnsupported) || len(*seen) != 0 {
 		t.Errorf("heic: %v, %d requests", err, len(*seen))
+	}
+	if _, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{Text: "x 1", Today: today}); err == nil || len(*seen) != 0 {
+		t.Errorf("no categories: %v, %d requests", err, len(*seen))
 	}
 }
 
@@ -219,7 +219,7 @@ func TestPrepareImageAppliesEXIFOrientation(t *testing.T) {
 func TestCorrect(t *testing.T) {
 	srv, seen := fake(t, message("claude-opus-5-5", "end_turn", answer))
 	res, err := extractor(t, srv, "claude-opus-5-5").Correct(ctx, Correction{
-		Current: decodeRaw(t, answer), Text: "  foi 45,90 no crédito  ", Today: today,
+		Current: decodeRaw(t, answer), Text: "  foi 45,90 no crédito  ", Today: today, Categories: categories,
 	})
 	if err != nil || res.Raw.Merchant != "Drogaria Boa Saúde" || res.Spend.USD == 0 {
 		t.Fatalf("%+v, %v", res, err)

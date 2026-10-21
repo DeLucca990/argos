@@ -60,7 +60,16 @@ func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest str
 	case "resumo":
 		text, err = b.digestCommand(ctx, user.ID, rest, now)
 	case "categorias":
-		text = categoriesText(b.catList)
+		r, err := b.categoryMenu(ctx, user.ID)
+		if err != nil {
+			log.Printf("user %d: /categorias: %v", user.ID, err)
+			b.sendHTML(ctx, chatID, dbErrorText)
+			return
+		}
+		b.show(ctx, chatID, 0, r)
+		return
+	case "categoria":
+		text, err = b.saveCategory(ctx, user.ID, rest)
 	case "cost":
 		text, err = b.costText(ctx, now)
 	default:
@@ -114,6 +123,10 @@ func (b *Bot) dayText(ctx context.Context, userID int64, now time.Time) (string,
 	if err != nil {
 		return "", err
 	}
+	cats, err := b.categories(ctx, userID)
+	if err != nil {
+		return "", err
+	}
 
 	var s strings.Builder
 	var total int64
@@ -130,7 +143,7 @@ func (b *Bot) dayText(ctx context.Context, userID int64, now time.Time) (string,
 		if e.SpentTime != "" {
 			clock = e.SpentTime + " "
 		}
-		s.WriteString("• " + clock + b.line(e) + "\n")
+		s.WriteString("• " + clock + line(e, cats) + "\n")
 	}
 	return s.String(), nil
 }
@@ -165,11 +178,15 @@ func (b *Bot) recentText(ctx context.Context, userID int64, arg string) (string,
 	if len(list) == 0 {
 		return "Nenhum gasto registrado ainda.", nil
 	}
+	cats, err := b.categories(ctx, userID)
+	if err != nil {
+		return "", err
+	}
 
 	var s strings.Builder
 	fmt.Fprintf(&s, "🧾 <b>Últimos %d gastos</b>\n\n", len(list))
 	for _, e := range list {
-		s.WriteString("• " + e.SpentOn.Format("02/01") + " " + b.line(e) + "\n")
+		s.WriteString("• " + e.SpentOn.Format("02/01") + " " + line(e, cats) + "\n")
 	}
 	return s.String(), nil
 }
@@ -230,6 +247,10 @@ func (b *Bot) exportCSV(ctx context.Context, userID int64, arg string, now time.
 	if err != nil {
 		return "", nil, 0, err
 	}
+	cats, err := b.categories(ctx, userID)
+	if err != nil {
+		return "", nil, 0, err
+	}
 
 	var buf bytes.Buffer
 	buf.WriteString("\ufeff")
@@ -240,7 +261,7 @@ func (b *Bot) exportCSV(ctx context.Context, userID int64, arg string, now time.
 	for _, e := range list {
 		w.Write([]string{
 			e.SpentOn.Format("02/01/2006"), e.SpentTime, cell(e.Merchant), e.MerchantTaxID,
-			b.cats[e.Category].Label, paymentLabels[e.PaymentMethod], cell(e.Account), e.CardLast4, decimal(e.TotalCents), e.Currency,
+			cats.of(e.Category).Label, paymentLabels[e.PaymentMethod], cell(e.Account), e.CardLast4, decimal(e.TotalCents), e.Currency,
 			cell(e.Description), sourceLabels[e.Source], strconv.FormatInt(e.ID, 10),
 		})
 	}
@@ -248,8 +269,8 @@ func (b *Bot) exportCSV(ctx context.Context, userID int64, arg string, now time.
 	return "argos-" + p.slug + ".csv", buf.Bytes(), len(list), w.Error()
 }
 
-func (b *Bot) line(e store.Expense) string {
-	return b.cats[e.Category].Emoji + " " + html.EscapeString(nonEmpty(e.Merchant, e.Description, "gasto")) +
+func line(e store.Expense, cats catalog) string {
+	return cats.of(e.Category).Emoji + " " + html.EscapeString(nonEmpty(e.Merchant, e.Description, "gasto")) +
 		" — " + money(e.TotalCents, e.Currency)
 }
 

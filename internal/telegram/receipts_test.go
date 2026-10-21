@@ -71,9 +71,6 @@ func testBot(t *testing.T, fx *fakeExtractor) (*Bot, store.User) {
 	t.Cleanup(func() { st.Close() })
 
 	b := &Bot{cfg: Config{DataDir: dir, Model: "claude-opus-5-5"}, store: st, extractor: fx, now: func() time.Time { return fixed }}
-	if err := b.loadCategories(ctx); err != nil {
-		t.Fatal(err)
-	}
 	os.MkdirAll(filepath.Join(dir, receiptsDir), 0o750)
 	user, err := st.SaveUser(ctx, store.User{TelegramID: 8683784233, FirstName: "Ana"})
 	if err != nil {
@@ -192,7 +189,8 @@ func TestTheCardSurvivesAButtonPress(t *testing.T) {
 	}
 
 	picker := b.card(ctx, e, true).keyboard.InlineKeyboard
-	if len(picker) != 9 || picker[2][1].Text != "✓ 🩺 Saúde" || picker[8][0].CallbackData != "ex:1:back" {
+	if len(picker) != 9 || picker[0][0].Text != "✓ 🩺 Saúde" || picker[0][0].CallbackData != "ex:1:c:6" ||
+		picker[8][0].Text != "➕ Nova" || picker[8][1].CallbackData != "ex:1:back" {
 		t.Errorf("the category picker: %+v", picker)
 	}
 
@@ -211,19 +209,19 @@ func TestParseCallback(t *testing.T) {
 		action, arg string
 		ok          bool
 	}{
-		"ex:12:ok":         {12, "ok", "", true},
-		"ex:12:c:farmacia": {12, "c", "farmacia", true},
-		"ex:0:ok":          {0, "", "", false},
-		"ex:x:ok":          {0, "", "", false},
-		"ap:12:ok":         {0, "", "", false},
-		"ex:12":            {0, "", "", false},
+		"ex:12:ok":  {12, "ok", "", true},
+		"ex:12:c:7": {12, "c", "7", true},
+		"ex:0:ok":   {0, "", "", false},
+		"ex:x:ok":   {0, "", "", false},
+		"ap:12:ok":  {0, "", "", false},
+		"ex:12":     {0, "", "", false},
 	} {
 		id, action, arg, ok := parseCallback(data)
 		if id != want.id || action != want.action || arg != want.arg || ok != want.ok {
 			t.Errorf("parseCallback(%q) = %d %q %q %v", data, id, action, arg, ok)
 		}
 	}
-	if got := callbackData(123456789, "c:assinaturas"); len(got) > 64 {
+	if got := callbackData(123456789012, "c:123456789012"); len(got) > 64 {
 		t.Errorf("%q is over Telegram's 64 bytes", got)
 	}
 }

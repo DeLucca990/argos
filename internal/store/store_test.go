@@ -80,8 +80,12 @@ func TestOpenMigratesOnceAndReopens(t *testing.T) {
 		if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != len(migrations) {
 			t.Errorf("user_version = %d, %v", version, err)
 		}
-		cats, err := s.Categories(ctx)
-		if err != nil || len(cats) != 16 || cats[0].Slug != "mercado" {
+		u, err := s.SaveUser(ctx, User{TelegramID: 42})
+		if err != nil {
+			t.Fatal(err)
+		}
+		cats, err := s.Categories(ctx, u.ID)
+		if err != nil || len(cats) != 16 || cats[0].Slug != "mercado" || cats[15].Slug != FallbackCategory {
 			t.Errorf("categories: %d, %v", len(cats), err)
 		}
 		var journal string

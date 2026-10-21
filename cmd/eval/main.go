@@ -81,7 +81,8 @@ func main() {
 	*model = nonEmpty(*model, os.Getenv("ARGOS_MODEL"), "claude-opus-5-5")
 	*effort = nonEmpty(*effort, os.Getenv("ARGOS_EFFORT"), "low")
 
-	x, err := extractor(*model, *effort)
+	x := extract.New(*model, *effort)
+	categories, err := defaultCategories()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -130,7 +131,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		res, err := x.Extract(ctx, extract.Input{MIME: types[strings.ToLower(filepath.Ext(file))], Data: data, Today: time.Now()})
+		res, err := x.Extract(ctx, extract.Input{MIME: types[strings.ToLower(filepath.Ext(file))], Data: data, Today: time.Now(), Categories: categories})
 		usd += res.Spend.USD
 		read++
 		got := expected{Merchant: res.Raw.Merchant, MerchantTaxID: res.Raw.MerchantTaxID, Date: res.Raw.Date,
@@ -199,13 +200,13 @@ func main() {
 		*model, *effort, strings.Join(scores, " · "), usd, read, noun, usd/float64(read))
 }
 
-func extractor(model, effort string) (*extract.Extractor, error) {
+func defaultCategories() ([]extract.Category, error) {
 	st, err := store.Open(":memory:")
 	if err != nil {
 		return nil, err
 	}
 	defer st.Close()
-	cats, err := st.Categories(context.Background())
+	cats, err := st.Categories(context.Background(), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +214,7 @@ func extractor(model, effort string) (*extract.Extractor, error) {
 	for _, c := range cats {
 		list = append(list, extract.Category{Slug: c.Slug, Label: c.Label})
 	}
-	return extract.New(model, effort, list)
+	return list, nil
 }
 
 func receipts(dir string) ([]string, error) {

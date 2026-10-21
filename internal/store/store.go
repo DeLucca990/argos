@@ -71,8 +71,14 @@ func (s *Store) migrate(ctx context.Context, list []migration) error {
 		}
 	}
 
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
 	var current int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&current); err != nil {
+	if err := conn.QueryRowContext(ctx, "PRAGMA user_version").Scan(&current); err != nil {
 		return err
 	}
 	if current > len(list) {
@@ -83,19 +89,51 @@ func (s *Store) migrate(ctx context.Context, list []migration) error {
 
 	for i, m := range list[current:] {
 		version := current + i + 1
-		if err := s.inTx(ctx, func(tx *sql.Tx) error {
-			if _, err := tx.ExecContext(ctx, m.sql); err != nil {
-				return fmt.Errorf("migration %s: %w", m.name, err)
-			}
-			_, err := tx.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(version))
-			return err
-		}); err != nil {
-			return err
+		if err := apply(ctx, conn, m, version); err != nil {
+			return fmt.Errorf("migration %s: %w", m.name, err)
 		}
 		s.version = version
 		s.applied = append(s.applied, m.name)
 	}
 	return nil
+}
+
+func apply(ctx context.Context, conn *sql.Conn, m migration, version int) (err error) {
+	if m.rebuild {
+		if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+			return err
+		}
+		defer func() {
+			if _, on := conn.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err == nil {
+				err = on
+			}
+		}()
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, m.sql); err != nil {
+		return err
+	}
+	if m.rebuild {
+		var table, parent string
+		var row sql.NullInt64
+		var fk int
+		err := tx.QueryRowContext(ctx, "PRAGMA foreign_key_check").Scan(&table, &row, &parent, &fk)
+		switch {
+		case err == nil:
+			return fmt.Errorf("row %d of %s points at a missing row of %s", row.Int64, table, parent)
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(version)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) inTx(ctx context.Context, fn func(*sql.Tx) error) error {

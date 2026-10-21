@@ -105,7 +105,8 @@ func TestRawFromRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	back := b.expenseFrom(r, user.ID, e.Source, e.AttachmentID)
+	cats, _ := b.categories(ctx, user.ID)
+	back := expenseFrom(r, cats, user.ID, e.Source, e.AttachmentID)
 	if back.TotalCents != e.TotalCents || !back.SpentOn.Equal(e.SpentOn) || back.SpentTime != e.SpentTime ||
 		back.Merchant != e.Merchant || back.PaymentMethod != e.PaymentMethod || back.Category != e.Category ||
 		len(back.Items) != 1 || back.Items[0] != e.Items[0] {

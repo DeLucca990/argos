@@ -1,8 +1,9 @@
 package store
 
 type migration struct {
-	name string
-	sql  string
+	name    string
+	sql     string
+	rebuild bool
 }
 
 var migrations = []migration{
@@ -134,5 +135,72 @@ CREATE TABLE digests (
 	{name: "0005_payment_account", sql: `
 ALTER TABLE expenses ADD COLUMN account TEXT NOT NULL DEFAULT '';
 ALTER TABLE expenses ADD COLUMN card_last4 TEXT CHECK (card_last4 GLOB '[0-9][0-9][0-9][0-9]');
+`},
+	{name: "0006_custom_categories", rebuild: true, sql: `
+CREATE TABLE new_categories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users (id),
+    slug        TEXT NOT NULL,
+    label       TEXT NOT NULL,
+    emoji       TEXT NOT NULL,
+    hint        TEXT NOT NULL DEFAULT '',
+    position    INTEGER NOT NULL,
+    archived_at TEXT
+);
+
+INSERT INTO new_categories (slug, label, emoji, position)
+    SELECT slug, label, emoji, position FROM categories ORDER BY position;
+
+CREATE TABLE new_expenses (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users (id),
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'confirmed', 'discarded')),
+    spent_on        TEXT NOT NULL CHECK (spent_on GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+    spent_time      TEXT CHECK (spent_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+    merchant        TEXT NOT NULL DEFAULT '',
+    merchant_tax_id TEXT NOT NULL DEFAULT '',
+    category_id     INTEGER NOT NULL REFERENCES categories (id),
+    payment_method  TEXT CHECK (payment_method IN ('pix', 'credito', 'debito', 'dinheiro', 'boleto', 'vale', 'outro')),
+    account         TEXT NOT NULL DEFAULT '',
+    card_last4      TEXT CHECK (card_last4 GLOB '[0-9][0-9][0-9][0-9]'),
+    total_cents     INTEGER NOT NULL CHECK (total_cents > 0),
+    currency        TEXT NOT NULL DEFAULT 'BRL',
+    description     TEXT NOT NULL DEFAULT '',
+    nfce_key        TEXT CHECK (length(nfce_key) = 44),
+    source          TEXT NOT NULL CHECK (source IN ('photo', 'pdf', 'text')),
+    attachment_id   INTEGER REFERENCES attachments (id),
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    confirmed_at    TEXT
+);
+
+INSERT INTO new_expenses (id, user_id, status, spent_on, spent_time, merchant, merchant_tax_id, category_id,
+    payment_method, account, card_last4, total_cents, currency, description, nfce_key, source, attachment_id,
+    created_at, updated_at, confirmed_at)
+    SELECT e.id, e.user_id, e.status, e.spent_on, e.spent_time, e.merchant, e.merchant_tax_id, c.id,
+        e.payment_method, e.account, e.card_last4, e.total_cents, e.currency, e.description, e.nfce_key, e.source,
+        e.attachment_id, e.created_at, e.updated_at, e.confirmed_at
+    FROM expenses e LEFT JOIN new_categories c ON c.user_id IS NULL AND c.slug = e.category
+    ORDER BY e.id;
+
+DELETE FROM sqlite_sequence WHERE name = 'new_expenses';
+INSERT INTO sqlite_sequence (name, seq) SELECT 'new_expenses', seq FROM sqlite_sequence WHERE name = 'expenses';
+
+DROP TABLE expenses;
+DROP TABLE categories;
+ALTER TABLE new_categories RENAME TO categories;
+ALTER TABLE new_expenses RENAME TO expenses;
+
+CREATE UNIQUE INDEX categories_shared ON categories (slug) WHERE user_id IS NULL;
+CREATE UNIQUE INDEX categories_own ON categories (user_id, slug) WHERE user_id IS NOT NULL;
+
+CREATE INDEX expenses_by_user_and_day ON expenses (user_id, status, spent_on);
+
+CREATE UNIQUE INDEX expenses_one_per_attachment ON expenses (attachment_id)
+    WHERE attachment_id IS NOT NULL AND status != 'discarded';
+
+CREATE UNIQUE INDEX expenses_one_per_nfce_key ON expenses (nfce_key)
+    WHERE nfce_key IS NOT NULL AND status != 'discarded';
 `},
 }

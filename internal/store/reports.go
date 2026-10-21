@@ -5,12 +5,6 @@ import (
 	"time"
 )
 
-type Category struct {
-	Slug  string
-	Label string
-	Emoji string
-}
-
 type CategoryTotal struct {
 	Category   Category
 	TotalCents int64
@@ -23,29 +17,11 @@ type Summary struct {
 	ByCategory []CategoryTotal
 }
 
-func (s *Store) Categories(ctx context.Context) ([]Category, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT slug, label, emoji FROM categories ORDER BY position`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var cats []Category
-	for rows.Next() {
-		var c Category
-		if err := rows.Scan(&c.Slug, &c.Label, &c.Emoji); err != nil {
-			return nil, err
-		}
-		cats = append(cats, c)
-	}
-	return cats, rows.Err()
-}
-
 func (s *Store) Summary(ctx context.Context, userID int64, from, to time.Time) (Summary, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT c.slug, c.label, c.emoji, SUM(e.total_cents), COUNT(*)
-		FROM expenses e JOIN categories c ON c.slug = e.category
+	rows, err := s.db.QueryContext(ctx, `SELECT c.id, c.slug, c.label, c.emoji, SUM(e.total_cents), COUNT(*)
+		FROM expenses e JOIN categories c ON c.id = e.category_id
 		WHERE e.user_id = ? AND e.status = 'confirmed' AND e.spent_on >= ? AND e.spent_on < ?
-		GROUP BY c.slug ORDER BY SUM(e.total_cents) DESC, c.position`,
+		GROUP BY c.id ORDER BY SUM(e.total_cents) DESC, c.position`,
 		userID, from.Format(dateLayout), to.Format(dateLayout))
 	if err != nil {
 		return Summary{}, err
@@ -55,7 +31,7 @@ func (s *Store) Summary(ctx context.Context, userID int64, from, to time.Time) (
 	var sum Summary
 	for rows.Next() {
 		var t CategoryTotal
-		if err := rows.Scan(&t.Category.Slug, &t.Category.Label, &t.Category.Emoji, &t.TotalCents, &t.Count); err != nil {
+		if err := rows.Scan(&t.Category.ID, &t.Category.Slug, &t.Category.Label, &t.Category.Emoji, &t.TotalCents, &t.Count); err != nil {
 			return Summary{}, err
 		}
 		sum.TotalCents += t.TotalCents

@@ -42,7 +42,15 @@ type details struct {
 }
 
 func (b *Bot) card(ctx context.Context, e store.Expense, picking bool) reply {
-	return reply{text: b.cardText(e, b.details(ctx, e)), keyboard: b.keyboard(e, picking)}
+	cats, err := b.categories(ctx, e.UserID)
+	if err != nil {
+		log.Printf("expense %d: %v", e.ID, err)
+	}
+	var choices catalog
+	if picking {
+		choices = b.byUse(ctx, e.UserID, cats)
+	}
+	return reply{text: cardText(e, b.details(ctx, e), cats), keyboard: keyboard(e, picking, choices)}
 }
 
 func (b *Bot) details(ctx context.Context, e store.Expense) details {
@@ -66,7 +74,7 @@ func (b *Bot) details(ctx context.Context, e store.Expense) details {
 	return d
 }
 
-func (b *Bot) cardText(e store.Expense, d details) string {
+func cardText(e store.Expense, d details, cats catalog) string {
 	var s strings.Builder
 	title := e.Merchant
 	if title == "" {
@@ -92,7 +100,7 @@ func (b *Bot) cardText(e store.Expense, d details) string {
 	}
 	s.WriteString(when + "\n")
 
-	cat := b.cats[e.Category]
+	cat := cats.of(e.Category)
 	s.WriteString(cat.Emoji + " " + html.EscapeString(cat.Label) + "\n")
 	s.WriteString("💰 <b>" + money(e.TotalCents, e.Currency) + "</b>\n")
 	if e.Description != "" && e.Description != title {
@@ -159,7 +167,7 @@ func money(cents int64, currency string) string {
 	return strings.Replace(brl, "R$", html.EscapeString(currency), 1)
 }
 
-func (b *Bot) keyboard(e store.Expense, picking bool) *models.InlineKeyboardMarkup {
+func keyboard(e store.Expense, picking bool, choices catalog) *models.InlineKeyboardMarkup {
 	button := func(text, action string) models.InlineKeyboardButton {
 		return models.InlineKeyboardButton{Text: text, CallbackData: callbackData(e.ID, action)}
 	}
@@ -169,7 +177,7 @@ func (b *Bot) keyboard(e store.Expense, picking bool) *models.InlineKeyboardMark
 		return nil
 	case picking:
 		var rows [][]models.InlineKeyboardButton
-		for i, c := range b.catList {
+		for i, c := range choices {
 			text := c.Emoji + " " + c.Label
 			if c.Slug == e.Category {
 				text = "✓ " + text
@@ -177,9 +185,9 @@ func (b *Bot) keyboard(e store.Expense, picking bool) *models.InlineKeyboardMark
 			if i%2 == 0 {
 				rows = append(rows, nil)
 			}
-			rows[len(rows)-1] = append(rows[len(rows)-1], button(text, "c:"+c.Slug))
+			rows[len(rows)-1] = append(rows[len(rows)-1], button(text, "c:"+strconv.FormatInt(c.ID, 10)))
 		}
-		rows = append(rows, []models.InlineKeyboardButton{button("↩️ Voltar", "back")})
+		rows = append(rows, []models.InlineKeyboardButton{button("➕ Nova", "new"), button("↩️ Voltar", "back")})
 		return &models.InlineKeyboardMarkup{InlineKeyboard: rows}
 	case e.Status == store.Pending:
 		return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{

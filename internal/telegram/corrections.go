@@ -58,8 +58,14 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 	if r, over := b.overBudget(ctx, now); over {
 		return r, nil
 	}
+	cats, err := b.categories(ctx, user.ID)
+	if err != nil {
+		log.Printf("user %d: %v", user.ID, err)
+		return reply{text: dbErrorText}, nil
+	}
 
-	res, err := b.extractor.Correct(ctx, extract.Correction{Current: rawFrom(e), Text: text, Today: now})
+	res, err := b.extractor.Correct(ctx, extract.Correction{Current: rawFrom(e), Text: text, Today: now,
+		Categories: cats.forModel(e.Category)})
 	record := b.recordOf(user.ID, e.AttachmentID, res, err)
 	record.Kind = store.KindCorrection
 	record.ExpenseID = id
@@ -73,7 +79,7 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 	if err != nil {
 		return reply{text: "Não entendi a correção. Diga, por exemplo, <i>foi 45,90</i>, <i>no crédito</i> ou <i>categoria farmácia</i>."}, nil
 	}
-	fixed := b.expenseFrom(r, user.ID, e.Source, e.AttachmentID)
+	fixed := expenseFrom(r, cats, user.ID, e.Source, e.AttachmentID)
 	fixed.ID = id
 	saved, err := b.store.UpdateExpense(ctx, user.ID, fixed)
 	var dup *store.DuplicateError
@@ -88,7 +94,7 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 	}
 
 	log.Printf("user %d: expense %d corrected", user.ID, id)
-	changes := b.changes(e, saved)
+	changes := changes(e, saved, cats)
 	out := "✏️ Nada mudou."
 	if len(changes) > 0 {
 		out = "✏️ Corrigido:\n• " + strings.Join(changes, "\n• ")
@@ -99,7 +105,7 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 	return reply{text: out, expenseID: id}, &saved
 }
 
-func (b *Bot) changes(before, after store.Expense) []string {
+func changes(before, after store.Expense, cats catalog) []string {
 	var out []string
 	change := func(label, from, to string) {
 		if from != to {
@@ -111,7 +117,7 @@ func (b *Bot) changes(before, after store.Expense) []string {
 	change("hora", before.SpentTime, after.SpentTime)
 	change("estabelecimento", before.Merchant, after.Merchant)
 	change("CNPJ/CPF", receipt.FormatTaxID(before.MerchantTaxID), receipt.FormatTaxID(after.MerchantTaxID))
-	change("categoria", b.cats[before.Category].Label, b.cats[after.Category].Label)
+	change("categoria", cats.of(before.Category).Label, cats.of(after.Category).Label)
 	change("pagamento", paidWith(before), paidWith(after))
 	change("descrição", before.Description, after.Description)
 	change("chave de acesso", before.NFCeKey, after.NFCeKey)

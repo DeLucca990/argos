@@ -48,7 +48,14 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 	for _, c := range cats {
 		t.cats[c.Slug] = c
 		slugs = append(slugs, c.Slug)
-		list = append(list, c.Slug+" = "+c.Label)
+		label := c.Slug + " = " + c.Label
+		if c.Hint != "" {
+			label += " (" + c.Hint + ")"
+		}
+		if c.Archived {
+			label += " [archived: no longer offered, but its expenses remain]"
+		}
+		list = append(list, label)
 	}
 	t.categoryList = "The categories, as the tools take them: " + strings.Join(list, "; ") + "."
 

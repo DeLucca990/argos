@@ -11,6 +11,7 @@ import (
 type Category struct {
 	Slug  string
 	Label string
+	Hint  string
 }
 
 func schema(categories []Category) (json.RawMessage, error) {
@@ -35,7 +36,11 @@ func schema(categories []Category) (json.RawMessage, error) {
 	labels := make([]string, 0, len(categories))
 	for _, c := range categories {
 		slugs = append(slugs, c.Slug)
-		labels = append(labels, c.Slug+" = "+c.Label)
+		label := c.Slug + " = " + c.Label
+		if c.Hint != "" {
+			label += " (" + c.Hint + ")"
+		}
+		labels = append(labels, label)
 	}
 
 	item := object(map[string]any{

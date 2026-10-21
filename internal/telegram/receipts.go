@@ -142,8 +142,14 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 	if r, over := b.overBudget(ctx, now); over {
 		return r
 	}
+	cats, err := b.categories(ctx, user.ID)
+	if err != nil {
+		log.Printf("user %d: %v", user.ID, err)
+		return reply{text: dbErrorText}
+	}
 
-	res, err := b.extractor.Extract(ctx, extract.Input{MIME: in.mime, Data: in.data, Text: in.text, Today: now})
+	res, err := b.extractor.Extract(ctx, extract.Input{MIME: in.mime, Data: in.data, Text: in.text, Today: now,
+		Categories: cats.forModel("")})
 	record := b.recordOf(user.ID, att.ID, res, err)
 	logRead(user, res, err)
 	if err != nil {
@@ -165,7 +171,7 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 		return reply{text: "Não encontrei o valor total. Mande uma foto mais nítida, ou escreva o gasto, como <i>mercado 87,40</i>."}
 	}
 
-	id, err := b.store.AddExpense(ctx, b.expenseFrom(r, user.ID, in.source, att.ID))
+	id, err := b.store.AddExpense(ctx, expenseFrom(r, cats, user.ID, in.source, att.ID))
 	var dup *store.DuplicateError
 	switch {
 	case errors.As(err, &dup):
@@ -198,10 +204,10 @@ func (b *Bot) recordOf(userID, attachmentID int64, res extract.Result, err error
 	}
 }
 
-func (b *Bot) expenseFrom(r receipt.Receipt, userID int64, source store.Source, attachmentID int64) store.Expense {
+func expenseFrom(r receipt.Receipt, cats catalog, userID int64, source store.Source, attachmentID int64) store.Expense {
 	category := r.Category
-	if _, ok := b.cats[category]; !ok {
-		category = fallbackCategory
+	if !cats.has(category) {
+		category = store.FallbackCategory
 	}
 	items := make([]store.Item, 0, len(r.Items))
 	for _, it := range r.Items {

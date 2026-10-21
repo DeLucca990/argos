@@ -4,8 +4,6 @@ import (
 	"html"
 	"strings"
 	"unicode"
-
-	"github.com/DeLucca990/argos-bot/internal/store"
 )
 
 type command struct {
@@ -22,7 +20,8 @@ var commands = []command{
 	{name: "desfazer", description: "Descarta o último gasto salvo"},
 	{name: "exportar", description: "O mês numa planilha CSV", usage: "[2026-10 | tudo]"},
 	{name: "resumo", description: "O resumo de um mês, comparado ao anterior", usage: "[mês]"},
-	{name: "categorias", description: "As categorias de gasto"},
+	{name: "categorias", description: "As categorias, e as suas para editar"},
+	{name: "categoria", description: "Cria uma categoria sua, ou muda o emoji e a dica dela", usage: "[emoji] Nome [— dica]"},
 	{name: "cost", description: "Quanto as leituras custaram"},
 	{name: "help", description: "O que este bot sabe fazer"},
 }
@@ -63,15 +62,6 @@ func helpText() string {
 			line += " " + c.usage
 		}
 		b.WriteString(html.EscapeString(line) + " — " + html.EscapeString(c.description) + "\n")
-	}
-	return b.String()
-}
-
-func categoriesText(cats []store.Category) string {
-	var b strings.Builder
-	b.WriteString("<b>Categorias</b>\n\n")
-	for _, c := range cats {
-		b.WriteString(c.Emoji + " " + html.EscapeString(c.Label) + "\n")
 	}
 	return b.String()
 }

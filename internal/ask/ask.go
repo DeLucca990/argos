@@ -48,7 +48,6 @@ type Asker struct {
 	model  string
 	effort string
 	store  *store.Store
-	tools  *tools
 
 	mu    sync.Mutex
 	convs map[int64]*conversation
@@ -60,13 +59,12 @@ type conversation struct {
 	lastUsed time.Time
 }
 
-func New(model, effort string, st *store.Store, cats []store.Category, opts ...option.RequestOption) *Asker {
+func New(model, effort string, st *store.Store, opts ...option.RequestOption) *Asker {
 	return &Asker{
 		client: anthropic.NewClient(opts...),
 		model:  model,
 		effort: effort,
 		store:  st,
-		tools:  newTools(st, cats),
 		convs:  map[int64]*conversation{},
 	}
 }
@@ -92,6 +90,12 @@ func (a *Asker) Ask(ctx context.Context, userID int64, question string, now time
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
+	cats, err := a.store.Categories(ctx, userID)
+	if err != nil {
+		return Answer{}, fmt.Errorf("reading the categories: %w", err)
+	}
+	t := newTools(a.store, cats)
+
 	var ans Answer
 	if len(conv.messages) > 0 && (now.Sub(conv.lastUsed) > idleReset || len(conv.messages) > maxHistory) {
 		conv.messages, ans.Reset = nil, len(conv.messages) > maxHistory
@@ -102,7 +106,7 @@ func (a *Asker) Ask(ctx context.Context, userID int64, question string, now time
 	conv.messages = append(conv.messages, anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(
 		"Hoje é "+weekday(now)+", "+now.Format("2006-01-02")+".\n\n"+strings.TrimSpace(question))))
 
-	text, err := a.loop(ctx, conv, userID, now, &ans)
+	text, err := a.loop(ctx, conv, t, userID, now, &ans)
 	if err != nil {
 		conv.messages = conv.messages[:start]
 		return ans, err
@@ -111,13 +115,13 @@ func (a *Asker) Ask(ctx context.Context, userID int64, question string, now time
 	return ans, nil
 }
 
-func (a *Asker) loop(ctx context.Context, conv *conversation, userID int64, now time.Time, ans *Answer) (string, error) {
+func (a *Asker) loop(ctx context.Context, conv *conversation, t *tools, userID int64, now time.Time, ans *Answer) (string, error) {
 	for range maxSteps {
 		params := anthropic.BetaMessageNewParams{
 			Model:        a.model,
 			MaxTokens:    maxTokens,
-			System:       []anthropic.BetaTextBlockParam{{Text: systemPrompt + "\n\n" + a.tools.categoryList}},
-			Tools:        a.tools.params,
+			System:       []anthropic.BetaTextBlockParam{{Text: systemPrompt + "\n\n" + t.categoryList}},
+			Tools:        t.params,
 			Messages:     conv.messages,
 			CacheControl: anthropic.NewBetaCacheControlEphemeralParam(),
 			OutputConfig: anthropic.BetaOutputConfigParam{Effort: anthropic.BetaOutputConfigEffort(a.effort)},
@@ -137,7 +141,7 @@ func (a *Asker) loop(ctx context.Context, conv *conversation, userID int64, now 
 
 		switch resp.StopReason {
 		case anthropic.BetaStopReasonToolUse:
-			conv.messages = append(conv.messages, anthropic.NewBetaUserMessage(a.run(ctx, resp.Content, userID, now)...))
+			conv.messages = append(conv.messages, anthropic.NewBetaUserMessage(t.run(ctx, resp.Content, userID, now)...))
 			continue
 		case anthropic.BetaStopReasonRefusal:
 			return "", fmt.Errorf("%s declined to answer (%s)", resp.Model, resp.StopDetails.Category)
@@ -159,14 +163,14 @@ func (a *Asker) loop(ctx context.Context, conv *conversation, userID int64, now 
 	return "", fmt.Errorf("no answer after %d steps", maxSteps)
 }
 
-func (a *Asker) run(ctx context.Context, content []anthropic.BetaContentBlockUnion, userID int64, now time.Time) []anthropic.BetaContentBlockParamUnion {
+func (t *tools) run(ctx context.Context, content []anthropic.BetaContentBlockUnion, userID int64, now time.Time) []anthropic.BetaContentBlockParamUnion {
 	var results []anthropic.BetaContentBlockParamUnion
 	for _, block := range content {
 		use, ok := block.AsAny().(anthropic.BetaToolUseBlock)
 		if !ok {
 			continue
 		}
-		out, err := a.tools.call(ctx, use.Name, []byte(use.JSON.Input.Raw()), userID, now)
+		out, err := t.call(ctx, use.Name, []byte(use.JSON.Input.Raw()), userID, now)
 		if err != nil {
 			results = append(results, anthropic.NewBetaToolResultBlock(use.ID, err.Error(), true))
 			continue

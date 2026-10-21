@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strconv"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -35,9 +36,27 @@ func (b *Bot) onCallback(ctx context.Context, q *models.CallbackQuery) {
 	case "cat", "back":
 		e, err = b.owned(ctx, user.ID, id)
 		picking = action == "cat"
+	case "new":
+		e, err = b.owned(ctx, user.ID, id)
+		picking = true
+		if err == nil && e.Status != store.Discarded {
+			chatID, messageID := callbackTarget(q)
+			b.prompt(ctx, chatID, newCategoryQuestion, newCategoryPlaceholder,
+				pending{kind: "new", expense: id, chatID: chatID, messageID: messageID})
+		}
 	case "c":
-		e, err = b.store.SetCategory(ctx, user.ID, id, arg)
-		toast = "Categoria: " + b.cats[arg].Label
+		var cats catalog
+		if cats, err = b.categories(ctx, user.ID); err != nil {
+			break
+		}
+		n, _ := strconv.ParseInt(arg, 10, 64)
+		c, ok := cats.byID(n)
+		if !ok {
+			err = store.ErrUnknownCategory
+			break
+		}
+		e, err = b.store.SetCategory(ctx, user.ID, id, c.Slug)
+		toast = "Categoria: " + c.Label
 	default:
 		b.answer(ctx, q, "Botão desconhecido.")
 		return
