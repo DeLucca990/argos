@@ -58,9 +58,6 @@ On a Mac or Windows a shared folder does not keep SQLite's file locks ([Data](#d
 `user` and use a volume.
 
 ```yaml
-    volumes:
-      - argos-data:/data
-
 volumes:
   argos-data:
     name: argos-data
