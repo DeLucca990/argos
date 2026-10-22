@@ -1,7 +1,19 @@
+<p align="center">
+  <img src="assets/argos.png" alt="Argos" width="240">
+</p>
+
 # Argos
 
 A Telegram bot that keeps track of what you spend. Send it a receipt — a photo, a PDF or a line
 of text — and Claude reads it into a SQLite database.
+
+## Argos Lore
+
+In Greek myth, Argos Panoptes — *the all-seeing* — was a giant with a hundred eyes, set by Hera
+to guard Io. He never slept with all of them at once: some were always open, so nothing slipped
+past him. When Hermes finally lulled him to sleep and killed him, Hera set his eyes on the
+peacock's tail, where they still are. This Argos keeps the same watch over your money: every
+receipt is seen, read and remembered.
 
 ## Install
 
