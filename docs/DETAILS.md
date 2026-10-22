@@ -184,24 +184,23 @@ leitura: ≈ US$ 0,0400 · claude-opus-5-5
 ```
 
 It is saved as soon as it is read — there is no confirmation step. **Categoria** swaps the
-buttons for the categories — the ones used most in the last 90 days first, *Outros* last — with
-**➕ Nova** to create one there and then; **Descartar** keeps the record but leaves it out of
-every total, and frees the receipt to be sent again.
+buttons for the categories — the ones used most in the last 90 days first, *Outros* last;
+**Descartar** keeps the record but leaves it out of every total, and frees the receipt to be
+sent again.
 
 **Sixteen categories are the same for everyone**, and nobody changes them from the chat. On top
-of them each person adds their own with `/categoria`: an emoji, the name, and — after a dash —
-a hint of what goes in it, *mensalidade, personal*. The hint is what Claude reads to tell when a
-receipt belongs there, so a category with a name only it could guess, like *Casa da praia*,
-needs one. Sending `/categoria` again with the name of one of yours changes its emoji or its
-hint; the name stays. A name a default already has is refused. Thirty at most, counting the
+of them each person adds their own with **➕ Nova categoria**, at the bottom of `/categorias` —
+the only place one is created. The bot asks, and the answer is an emoji, the name, and — after
+a dash — a hint of what goes in it: *🏋️ Academia — mensalidade, personal*. The hint is what
+Claude reads to tell when a receipt belongs there, so a category with a name only it could
+guess, like *Casa da praia*, needs one. A name a default already has is refused. Thirty at most, counting the
 sixteen, with *Outros* always last, where a receipt that fits none of them goes. Nobody sees
 anyone else's.
 
-`/categorias` lists them with a button for each of yours, which opens **Nome**, **Emoji**,
-**Dica** and **Remover**; the first three ask, and the answer is a reply to the question.
-Removing one with expenses only archives it: it leaves the buttons and what Claude may choose
-from, its expenses stay in it and in every report and answer, and `/categoria` with its name
-brings it back. One with no expenses is deleted.
+`/categorias` also has a button for each of yours, which opens **Nome**, **Emoji**, **Dica**
+and **Remover**; the first three ask too. Removing one with expenses only archives it: it leaves
+the buttons and what Claude may choose from, its expenses stay in it and in every report and
+answer, and creating it again by the same name brings it back. One with no expenses is deleted.
 
 **To correct one, reply to its card** in your own words — *foi 45,90*, *no crédito*, *era
 ontem*, *o nome é Padaria Real*, or all at once. Claude is shown the expense as recorded and the
@@ -273,8 +272,7 @@ the original to look at again, or to read anew with a better model.
 | `/desfazer` | discards the expense saved last — the same as its card's Descartar |
 | `/exportar [mês \| tudo]` | a month, or everything, as a CSV file |
 | `/resumo [mês]` | the monthly digest below, for any month; the last closed one unless named |
-| `/categorias` | the default categories, then yours with their hints and a button to edit or remove each |
-| `/categoria [emoji] Nome [— dica]` | creates a category of your own, or gives one of yours a new emoji or hint |
+| `/categorias` | the default categories, then yours with their hints; ➕ to create one, and a button to edit or remove each |
 | `/cost` | what the model calls cost today, in 7 days and in 30 — readings, corrections and questions apart — and the model making them |
 
 A month is `2026-10`, `10/2026`, `10`, `outubro` or `out`, with a year after the name if it is

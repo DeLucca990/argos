@@ -24,7 +24,6 @@ const (
 type pending struct {
 	kind      string
 	category  int64
-	expense   int64
 	chatID    int64
 	messageID int
 }
@@ -67,7 +66,7 @@ func (b *Bot) categoryMenu(ctx context.Context, userID int64) (reply, error) {
 	} else {
 		text += "\n"
 	}
-	text += "Para criar uma sua, toque em ➕ ou mande " + html.EscapeString(categoryUsage)
+	text += "Para criar uma sua, toque em ➕ Nova categoria."
 
 	var rows [][]models.InlineKeyboardButton
 	for i, button := range buttons {
@@ -122,7 +121,7 @@ func (b *Bot) onCategoryCallback(ctx context.Context, q *models.CallbackQuery) {
 
 	if action == "new" {
 		back.kind = "new"
-		b.prompt(ctx, chatID, newCategoryQuestion, newCategoryPlaceholder, back)
+		b.prompt(ctx, chatID, newCategoryQuestion, categoryExample, back)
 		b.answer(ctx, q, "")
 		return
 	}
@@ -205,8 +204,7 @@ func (b *Bot) refreshMenu(ctx context.Context, userID int64, at pending, categor
 
 const (
 	newCategoryQuestion = "Mande o emoji e o nome da categoria nova e, se quiser, depois de um travessão, " +
-		"o que entra nela. Por exemplo: <i>🏋️ Academia — mensalidade, personal</i>"
-	newCategoryPlaceholder = "🏋️ Academia — mensalidade, personal"
+		"o que entra nela. Por exemplo: <i>" + categoryExample + "</i>"
 )
 
 func (b *Bot) prompt(ctx context.Context, chatID int64, text, placeholder string, p pending) {
@@ -260,15 +258,12 @@ func (b *Bot) onPending(ctx context.Context, msg *models.Message, key pendingKey
 }
 
 func (b *Bot) answerPending(ctx context.Context, userID int64, text string, p pending) (string, error) {
-	if p.kind == "new" && p.expense == 0 {
+	if p.kind == "new" {
 		out, err := b.saveCategory(ctx, userID, text)
 		if err == nil {
 			b.refreshMenu(ctx, userID, p, 0)
 		}
 		return out, err
-	}
-	if p.kind == "new" {
-		return b.newCategoryFor(ctx, userID, text, p)
 	}
 
 	cats, err := b.categories(ctx, userID)
@@ -325,39 +320,4 @@ func (b *Bot) answerPending(ctx context.Context, userID int64, text string, p pe
 		return "✏️ Apaguei a dica de " + name + ".", nil
 	}
 	return "✏️ Dica de " + name + ": <i>" + html.EscapeString(saved.Hint) + "</i>", nil
-}
-
-func (b *Bot) newCategoryFor(ctx context.Context, userID int64, text string, p pending) (string, error) {
-	c, err := parseCategory(text)
-	if err != nil {
-		return "", err
-	}
-	saved, created, err := b.store.SaveCategory(ctx, userID, c)
-	shared := errors.Is(err, store.ErrSharedCategory)
-	switch {
-	case errors.Is(err, store.ErrCategoryLimit):
-		return "", usageError{fmt.Sprintf("Já são %d categorias, contando as padrão: é o máximo.", store.MaxCategories)}
-	case err != nil && !shared:
-		return "", err
-	}
-
-	e, err := b.store.SetCategory(ctx, userID, p.expense, saved.Slug)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return "Não encontrei esse gasto.", nil
-	case errors.Is(err, store.ErrNotPending):
-		return "Esse gasto foi descartado.", nil
-	case err != nil:
-		return "", err
-	}
-	b.edit(ctx, p.chatID, p.messageID, b.card(ctx, e, false))
-
-	name := saved.Emoji + " <b>" + html.EscapeString(saved.Label) + "</b>"
-	switch {
-	case shared:
-		return name + " já é uma categoria padrão: passei o gasto para ela.", nil
-	case created:
-		return "✅ Criei a categoria " + name + " e passei o gasto para ela.", nil
-	}
-	return "Passei o gasto para " + name + ".", nil
 }

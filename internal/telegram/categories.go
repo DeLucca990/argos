@@ -22,7 +22,7 @@ const (
 	usageDays     = 90
 )
 
-const categoryUsage = "/categoria 🏋️ Academia — mensalidade, personal"
+const categoryExample = "🏋️ Academia — mensalidade, personal"
 
 type catalog []store.Category
 
@@ -117,14 +117,13 @@ func (b *Bot) saveCategory(ctx context.Context, userID int64, arg string) (strin
 		return "✅ Criei a categoria " + name + "." + hint + "\n\nOs próximos comprovantes já podem cair nela. " +
 			"Para mudar a de um gasto, toque em 🏷️ Categoria no cartão.", nil
 	case c.Emoji == "" && c.Hint == "":
-		return "A categoria " + name + " já existe." + hint + "\n\nPara mudar o emoji ou a dica: " +
-			html.EscapeString("/categoria 💪 "+saved.Label+" — o que entra nela"), nil
+		return "A categoria " + name + " já existe." + hint + "\n\nPara mudar o nome, o emoji ou a dica, toque nela em /categorias.", nil
 	}
 	return "✏️ Atualizei " + name + "." + hint, nil
 }
 
 func parseCategory(arg string) (store.Category, error) {
-	usage := usageError{"Mande o emoji, o nome e, se quiser, uma dica do que entra nela: " + categoryUsage}
+	usage := usageError{"Mande o emoji, o nome e, se quiser, depois de um travessão, o que entra nela: " + categoryExample}
 	name, hint := strings.TrimSpace(arg), ""
 	for _, sep := range []string{"—", "–", " - "} {
 		if before, after, found := strings.Cut(name, sep); found {

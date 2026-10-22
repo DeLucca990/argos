@@ -20,8 +20,7 @@ var commands = []command{
 	{name: "desfazer", description: "Descarta o último gasto salvo"},
 	{name: "exportar", description: "O mês numa planilha CSV", usage: "[2026-10 | tudo]"},
 	{name: "resumo", description: "O resumo de um mês, comparado ao anterior", usage: "[mês]"},
-	{name: "categorias", description: "As categorias, e as suas para editar"},
-	{name: "categoria", description: "Cria uma categoria sua, ou muda o emoji e a dica dela", usage: "[emoji] Nome [— dica]"},
+	{name: "categorias", description: "As categorias, e as suas para criar e editar"},
 	{name: "cost", description: "Quanto as leituras custaram"},
 	{name: "help", description: "O que este bot sabe fazer"},
 }

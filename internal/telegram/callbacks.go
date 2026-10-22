@@ -36,14 +36,6 @@ func (b *Bot) onCallback(ctx context.Context, q *models.CallbackQuery) {
 	case "cat", "back":
 		e, err = b.owned(ctx, user.ID, id)
 		picking = action == "cat"
-	case "new":
-		e, err = b.owned(ctx, user.ID, id)
-		picking = true
-		if err == nil && e.Status != store.Discarded {
-			chatID, messageID := callbackTarget(q)
-			b.prompt(ctx, chatID, newCategoryQuestion, newCategoryPlaceholder,
-				pending{kind: "new", expense: id, chatID: chatID, messageID: messageID})
-		}
 	case "c":
 		var cats catalog
 		if cats, err = b.categories(ctx, user.ID); err != nil {

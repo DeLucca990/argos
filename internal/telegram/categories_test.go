@@ -45,7 +45,7 @@ func TestParseCategory(t *testing.T) {
 	}
 }
 
-func TestCategoryCommand(t *testing.T) {
+func TestCreatingACategory(t *testing.T) {
 	raw := pharmacy()
 	raw.Merchant, raw.Category = "Smart Fit", "academia"
 	fx := answering(raw)
@@ -115,7 +115,7 @@ func TestPickingACategoryByItsID(t *testing.T) {
 		t.Errorf("the category in use goes first: %+v", picker[0])
 	}
 	if button.Text != "👵 Remédios da vó" || button.CallbackData != "ex:1:c:"+strconv.FormatInt(c.ID, 10) ||
-		picker[8][0].Text != "📦 Outros" || picker[9][0].CallbackData != "ex:1:new" || picker[9][1].CallbackData != "ex:1:back" {
+		picker[8][0].Text != "📦 Outros" || len(picker[9]) != 1 || picker[9][0].CallbackData != "ex:1:back" {
 		t.Fatalf("the new category in the picker: %+v", picker[7:])
 	}
 
@@ -249,31 +249,46 @@ func TestCategoryMenu(t *testing.T) {
 	}
 }
 
-func TestNewCategoryFromTheCard(t *testing.T) {
+func TestNewCategoryFromTheList(t *testing.T) {
 	b, user := testBot(t, answering(pharmacy()))
 	calls := fakeTelegram(t, b)
+
+	pressOn(b, user, 50, "cat:0:new")
+	question := calls.last("sendMessage")
+	if !strings.Contains(question["text"], "categoria nova") || !strings.Contains(question["reply_markup"], `"force_reply":true`) {
+		t.Fatalf("the question: %v", question)
+	}
+	replyTo(b, user, calls.lastID(), "tênis")
+	if got := calls.last("sendMessage"); !strings.Contains(got["text"], "Criei a categoria 🏷️ <b>Tênis</b>") {
+		t.Errorf("the answer: %v", got)
+	}
+	if got := calls.last("editMessageText"); got["message_id"] != "50" || !strings.Contains(got["reply_markup"], `"text":"🏷️ Tênis"`) {
+		t.Errorf("the list was not refreshed with it: %v", got)
+	}
+
+	pressOn(b, user, 50, "cat:0:new")
+	replyTo(b, user, calls.lastID(), "🏋️")
+	if got := calls.last("sendMessage"); !strings.Contains(got["text"], "Responda à pergunta de novo") {
+		t.Errorf("an answer with no name: %v", got)
+	}
+	replyTo(b, user, calls.lastID()-1, "🏋️ Academia — mensalidade")
+	if cats, _ := b.categories(ctx, user.ID); len(cats) != 18 || cats[16].Slug != "academia" || cats[16].Hint != "mensalidade" {
+		t.Errorf("answering the same question again: %+v", cats[15:])
+	}
+
+	replyTo(b, user, 1, "/categoria 🎰 Cassino")
+	if cats, _ := b.categories(ctx, user.ID); len(cats) != 18 {
+		t.Errorf("/categoria still creates one: %d categories", len(cats))
+	}
+
 	b.read(ctx, user, incoming{data: photo, mime: "image/jpeg", source: store.SourcePhoto})
-
-	pressOn(b, user, 10, "ex:1:new")
-	replyTo(b, user, calls.lastID(), "🎾 tênis — aulas, quadra")
 	e, _ := b.store.Expense(ctx, 1)
-	if e.Category != "tenis" {
-		t.Errorf("the expense was not moved to the new category: %q", e.Category)
-	}
-	if got := calls.last("sendMessage"); !strings.Contains(got["text"], "Criei a categoria 🎾 <b>Tênis</b> e passei o gasto para ela") {
-		t.Errorf("the answer: %v", got)
-	}
-	if got := calls.last("editMessageText"); got["message_id"] != "10" || !strings.Contains(got["text"], "🎾 Tênis") {
-		t.Errorf("the card: %v", got)
-	}
-
-	pressOn(b, user, 10, "ex:1:new")
-	replyTo(b, user, calls.lastID(), "farmácia")
-	if e, _ := b.store.Expense(ctx, 1); e.Category != "farmacia" {
-		t.Errorf("naming a default: %q", e.Category)
-	}
-	if got := calls.last("sendMessage"); !strings.Contains(got["text"], "💊 <b>Farmácia</b> já é uma categoria padrão: passei o gasto para ela") {
-		t.Errorf("the answer: %v", got)
+	for _, row := range b.card(ctx, e, true).keyboard.InlineKeyboard {
+		for _, button := range row {
+			if strings.Contains(button.Text, "Nova") || strings.HasSuffix(button.CallbackData, ":new") {
+				t.Errorf("the card's picker offers to create a category: %+v", button)
+			}
+		}
 	}
 }
 

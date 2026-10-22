@@ -68,8 +68,6 @@ func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest str
 		}
 		b.show(ctx, chatID, 0, r)
 		return
-	case "categoria":
-		text, err = b.saveCategory(ctx, user.ID, rest)
 	case "cost":
 		text, err = b.costText(ctx, now)
 	default:

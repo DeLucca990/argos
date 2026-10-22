@@ -187,7 +187,7 @@ func keyboard(e store.Expense, picking bool, choices catalog) *models.InlineKeyb
 			}
 			rows[len(rows)-1] = append(rows[len(rows)-1], button(text, "c:"+strconv.FormatInt(c.ID, 10)))
 		}
-		rows = append(rows, []models.InlineKeyboardButton{button("➕ Nova", "new"), button("↩️ Voltar", "back")})
+		rows = append(rows, []models.InlineKeyboardButton{button("↩️ Voltar", "back")})
 		return &models.InlineKeyboardMarkup{InlineKeyboard: rows}
 	case e.Status == store.Pending:
 		return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{

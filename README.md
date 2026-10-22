@@ -41,8 +41,8 @@ Then send the bot `/start`. On a Mac or Windows the data goes in a volume instea
 
 Send a receipt — a photo, an image or PDF file, or text such as *almoço 35,90 no pix* — and it
 is saved and answered with a card; reply to the card to correct it. Ask in plain words: *quanto
-gastei com mercado em setembro?* Add categories of your own with `/categoria 🏋️ Academia —
-mensalidade, personal`. `/help` lists the commands.
+gastei com mercado em setembro?* Add categories of your own with the ➕ at the bottom of
+`/categorias`. `/help` lists the commands.
 
 ## More
 

@@ -190,7 +190,7 @@ func TestTheCardSurvivesAButtonPress(t *testing.T) {
 
 	picker := b.card(ctx, e, true).keyboard.InlineKeyboard
 	if len(picker) != 9 || picker[0][0].Text != "✓ 🩺 Saúde" || picker[0][0].CallbackData != "ex:1:c:6" ||
-		picker[8][0].Text != "➕ Nova" || picker[8][1].CallbackData != "ex:1:back" {
+		len(picker[8]) != 1 || picker[8][0].CallbackData != "ex:1:back" {
 		t.Errorf("the category picker: %+v", picker)
 	}
 
