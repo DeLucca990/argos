@@ -203,4 +203,18 @@ CREATE UNIQUE INDEX expenses_one_per_attachment ON expenses (attachment_id)
 CREATE UNIQUE INDEX expenses_one_per_nfce_key ON expenses (nfce_key)
     WHERE nfce_key IS NOT NULL AND status != 'discarded';
 `},
+	{name: "0007_lessons", sql: `
+CREATE TABLE lessons (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users (id),
+    expense_id INTEGER REFERENCES expenses (id) ON DELETE SET NULL,
+    field      TEXT NOT NULL CHECK (field IN ('merchant', 'payment_method', 'payment_account', 'card_last4', 'category')),
+    value      TEXT NOT NULL,
+    layout     TEXT NOT NULL DEFAULT '',
+    payee      TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX lessons_by_user ON lessons (user_id, id);
+`},
 }

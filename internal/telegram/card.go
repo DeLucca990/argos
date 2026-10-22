@@ -35,10 +35,11 @@ type reply struct {
 }
 
 type details struct {
-	warnings []string
-	notes    string
-	usd      float64
-	model    string
+	warnings   []string
+	notes      string
+	remembered []string
+	usd        float64
+	model      string
 }
 
 func (b *Bot) card(ctx context.Context, e store.Expense, picking bool) reply {
@@ -68,7 +69,7 @@ func (b *Bot) details(ctx context.Context, e store.Expense) details {
 	var raw receipt.Raw
 	if json.Unmarshal([]byte(x.RawJSON), &raw) == nil {
 		if r, err := receipt.Parse(raw, x.CreatedAt.In(time.Local)); err == nil {
-			d.warnings, d.notes = r.Warnings, r.Notes
+			d.warnings, d.notes, d.remembered = r.Warnings, r.Notes, r.Remembered
 		}
 	}
 	return d
@@ -118,13 +119,16 @@ func cardText(e store.Expense, d details, cats catalog) string {
 		}
 	}
 
-	if len(d.warnings) > 0 || d.notes != "" {
+	if len(d.warnings) > 0 || d.notes != "" || len(d.remembered) > 0 {
 		s.WriteString("\n")
 		for _, w := range d.warnings {
 			s.WriteString("⚠️ " + html.EscapeString(w) + "\n")
 		}
 		if d.notes != "" {
 			s.WriteString("📝 " + html.EscapeString(d.notes) + "\n")
+		}
+		if len(d.remembered) > 0 {
+			s.WriteString(rememberedText(d.remembered) + "\n")
 		}
 	}
 

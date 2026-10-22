@@ -10,6 +10,8 @@ import (
 
 var PaymentMethods = []string{"pix", "credito", "debito", "dinheiro", "boleto", "vale", "outro"}
 
+var LessonFields = []string{"merchant", "payment_method", "payment_account", "card_last4", "category"}
+
 var ErrNoTotal = errors.New("no total")
 
 type NotReceiptError struct{ Reason string }
@@ -33,6 +35,8 @@ type Raw struct {
 	NFCeAccessKey    string    `json:"nfce_access_key"`
 	Items            []RawItem `json:"items"`
 	Notes            string    `json:"notes"`
+	Layout           string    `json:"layout"`
+	Remembered       []string  `json:"remembered"`
 }
 
 type RawItem struct {
@@ -58,6 +62,8 @@ type Receipt struct {
 	Items         []Item
 	Notes         string
 	Warnings      []string
+	Layout        string
+	Remembered    []string
 }
 
 type Item struct {
@@ -83,6 +89,12 @@ func Parse(raw Raw, today time.Time) (Receipt, error) {
 		Category:    strings.TrimSpace(raw.Category),
 		Description: strings.TrimSpace(raw.Description),
 		Notes:       strings.TrimSpace(raw.Notes),
+		Layout:      strings.TrimSpace(raw.Layout),
+	}
+	for _, f := range raw.Remembered {
+		if slices.Contains(LessonFields, f) && !slices.Contains(r.Remembered, f) {
+			r.Remembered = append(r.Remembered, f)
+		}
 	}
 	r.parseDate(raw.Date, raw.Time, today)
 	r.parseTaxID(raw.MerchantTaxID)

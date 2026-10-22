@@ -170,8 +170,12 @@ const dbErrorText = "⚠️ Não consegui acessar o banco de dados."
 
 func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	if u.CallbackQuery != nil {
-		if strings.HasPrefix(u.CallbackQuery.Data, categoryPrefix) {
+		switch data := u.CallbackQuery.Data; {
+		case strings.HasPrefix(data, categoryPrefix):
 			b.onCategoryCallback(ctx, u.CallbackQuery)
+			return
+		case strings.HasPrefix(data, lessonPrefix):
+			b.onLessonCallback(ctx, u.CallbackQuery)
 			return
 		}
 		b.onCallback(ctx, u.CallbackQuery)

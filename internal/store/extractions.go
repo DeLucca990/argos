@@ -31,6 +31,14 @@ const (
 )
 
 func (s *Store) ExtractionFor(ctx context.Context, expenseID int64) (Extraction, error) {
+	return s.extraction(ctx, `expense_id = ? ORDER BY id DESC`, expenseID)
+}
+
+func (s *Store) FirstReading(ctx context.Context, expenseID int64) (Extraction, error) {
+	return s.extraction(ctx, `expense_id = ? AND kind = '`+KindReceipt+`' AND NOT failed ORDER BY id`, expenseID)
+}
+
+func (s *Store) extraction(ctx context.Context, where string, args ...any) (Extraction, error) {
 	var (
 		x                   Extraction
 		attachment, expense sql.NullInt64
@@ -38,7 +46,7 @@ func (s *Store) ExtractionFor(ctx context.Context, expenseID int64) (Extraction,
 	)
 	err := s.db.QueryRowContext(ctx, `SELECT id, kind, user_id, attachment_id, expense_id, model, raw_json, failed,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, usd, created_at
-		FROM extractions WHERE expense_id = ? ORDER BY id DESC LIMIT 1`, expenseID).
+		FROM extractions WHERE `+where+` LIMIT 1`, args...).
 		Scan(&x.ID, &x.Kind, &x.UserID, &attachment, &expense, &x.Model, &x.RawJSON, &x.Failed, &x.InputTokens,
 			&x.OutputTokens, &x.CacheReadTokens, &x.CacheWriteTokens, &x.USD, &created)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -217,6 +217,30 @@ That answer counts as the card too, so replying to it corrects again. A reply th
 nothing applicable changes nothing and says so. The cost line on the card becomes the sum of
 the reading and every correction.
 
+**Corrections are remembered.** Reading a photo or PDF, Claude also describes what kind of
+receipt it is — the app or machine it seems to come from, its colours, its section titles, never
+its data. When a correction changes something that belongs to that kind of receipt rather than
+to this one purchase, the bot keeps it as a lesson:
+
+- the account, the card or the payment method, for receipts that look like this one;
+- the name or the category, for payments to the same recipient as read — or, when the receipt
+  names nobody, for receipts that look like this one.
+
+The total, the date and the time are never learned. The answer to the correction says what was
+kept, with a **🙅 Não lembrar** button for a correction that was about that receipt alone:
+
+```
+🧠 Vou lembrar disso nos próximos comprovantes:
+• comprovantes como este (comprovante de Pix em tela de app, títulos em roxo): conta Nubank
+• pagamentos a MARIA S SOUZA: nome Personal trainer
+```
+
+Every reading after that takes your lessons along — the newest 20, a newer one replacing an
+older one for the same kind of receipt and field — and Claude uses one only when the receipt
+matches it and does not show the field itself. A card filled from a lesson says so:
+*🧠 Lembrado das suas correções: conta.* Lessons are learned only from replies to a card, not
+from the category buttons, and only from photos and PDFs, never from typed purchases.
+
 **The daily budget.** With `ARGOS_DAILY_BUDGET_USD` set, a receipt or a correction that would
 start once today's model calls have reached it is answered with how much the day cost, and not
 read; commands keep working, and it lifts at midnight. It is checked before a call, so the call
@@ -446,6 +470,7 @@ instead of skipping a step.
 | `attachments` | the files received, by sha256, so the same file is kept once |
 | `extractions` | every call to the model: its raw answer, tokens and estimated cost |
 | `categories` | the sixteen defaults, kept once with no `user_id`, and each user's own — name, emoji, a hint of what goes in it, and when it was archived |
+| `lessons` | what each user taught by correcting: the field, the right value, and the kind of receipt or the recipient it applies to |
 
 Who may use the bot is still `TELEGRAM_ALLOWED_USER_IDS`; `users` records who did, and every
 expense and extraction belongs to one of them. Removing someone from the list stops them without

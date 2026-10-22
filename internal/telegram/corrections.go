@@ -102,7 +102,17 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 	if r.Notes != "" {
 		out += "\n\n📝 " + html.EscapeString(r.Notes)
 	}
-	return reply{text: out, expenseID: id}, &saved
+	answer := reply{text: out, expenseID: id}
+	learned, err := b.learn(ctx, user.ID, e, saved)
+	if err != nil {
+		log.Printf("user %d: learning from the correction of expense %d: %v", user.ID, id, err)
+	}
+	if len(learned) > 0 {
+		log.Printf("user %d: %d lesson(s) learned from expense %d", user.ID, len(learned), id)
+		answer.text += "\n\n" + lessonsText(learned, cats)
+		answer.keyboard = forgetKeyboard(learned)
+	}
+	return answer, &saved
 }
 
 func changes(before, after store.Expense, cats catalog) []string {
@@ -132,6 +142,7 @@ func rawFrom(e store.Expense) receipt.Raw {
 		IsReceipt: true, Merchant: e.Merchant, MerchantTaxID: e.MerchantTaxID, Date: e.SpentOn.Format("2006-01-02"),
 		Time: e.SpentTime, Total: dotDecimal(e.TotalCents), Currency: e.Currency, PaymentMethod: e.PaymentMethod,
 		PaymentAccount: e.Account, CardLast4: e.CardLast4, Category: e.Category, Description: e.Description, NFCeAccessKey: e.NFCeKey, Items: []receipt.RawItem{},
+		Remembered: []string{},
 	}
 	for _, it := range e.Items {
 		unit := ""

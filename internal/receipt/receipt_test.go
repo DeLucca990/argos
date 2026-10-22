@@ -168,3 +168,11 @@ func TestParseAccountAndCard(t *testing.T) {
 		}
 	}
 }
+
+func TestParseKeepsWhatWasRemembered(t *testing.T) {
+	raw := Raw{IsReceipt: true, Total: "10.00", Layout: "  tela roxa ", Remembered: []string{"payment_account", "total", "payment_account", "merchant"}}
+	r, err := Parse(raw, time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC))
+	if err != nil || r.Layout != "tela roxa" || strings.Join(r.Remembered, ",") != "payment_account,merchant" {
+		t.Errorf("%+v, %v", r, err)
+	}
+}

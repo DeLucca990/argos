@@ -60,7 +60,7 @@ func TestCustomCategoriesMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if got := strings.Join(s.Applied(), ","); got != "0006_custom_categories" {
+	if got := strings.Join(s.Applied(), ","); !strings.HasPrefix(got, "0006_custom_categories") {
 		t.Fatalf("applied %q", got)
 	}
 

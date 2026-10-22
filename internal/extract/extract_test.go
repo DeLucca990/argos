@@ -246,3 +246,38 @@ func decodeRaw(t *testing.T, s string) (r receipt.Raw) {
 	}
 	return r
 }
+
+func TestLessonsGoWithTheReceipt(t *testing.T) {
+	srv, seen := fake(t, message("claude-opus-5-5", "end_turn", answer))
+	lessons := []Lesson{
+		{When: `receipts that look like "tela de Pix, títulos em roxo"`, Field: "payment_account", Value: "Nubank"},
+		{When: `payments to "MARIA S SOUZA"`, Field: "merchant", Value: "Personal trainer"},
+	}
+	if _, err := extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{MIME: "image/jpeg", Data: smallJPEG(t, 10, 10),
+		Today: today, Categories: categories, Lessons: lessons}); err != nil {
+		t.Fatal(err)
+	}
+	req := (*seen)[0]
+	content := req.body["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	text := content[1].(map[string]any)["text"].(string)
+	for _, want := range []string{"newer wins", "List in remembered",
+		"\n- receipts that look like \"tela de Pix, títulos em roxo\": payment_account = \"Nubank\"",
+		"\n- payments to \"MARIA S SOUZA\": merchant = \"Personal trainer\""} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the text lacks %q:\n%s", want, text)
+		}
+	}
+
+	props := req.body["output_config"].(map[string]any)["format"].(map[string]any)["schema"].(map[string]any)["properties"].(map[string]any)
+	remembered := props["remembered"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
+	if props["layout"] == nil || len(remembered) != 5 {
+		t.Errorf("layout %v, remembered %v", props["layout"], remembered)
+	}
+
+	srv, seen = fake(t, message("claude-opus-5-5", "end_turn", answer))
+	extractor(t, srv, "claude-opus-5-5").Extract(ctx, Input{Text: "x 1", Today: today, Categories: categories})
+	content = (*seen)[0].body["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if text := content[0].(map[string]any)["text"].(string); strings.Contains(text, "taught you") {
+		t.Errorf("no lessons, no section:\n%s", text)
+	}
+}

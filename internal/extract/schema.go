@@ -77,5 +77,14 @@ func schema(categories []Category) (json.RawMessage, error) {
 		"nfce_access_key": str("the 44-character chave de acesso of an NF-e or NFC-e, without spaces; empty when not printed"),
 		"items":           map[string]any{"type": "array", "items": item, "description": "the line items when the document lists them; empty otherwise"},
 		"notes":           str("in Brazilian Portuguese, anything you are unsure of — an illegible digit, two candidate totals; empty when nothing"),
+		"layout": str("for a photo or PDF, what this kind of receipt looks like, in Brazilian Portuguese and in the same words " +
+			"for every receipt of its kind: the app, bank, card machine or system that produced it if you recognise it, " +
+			"its main colours and its section titles as printed — e.g. \"comprovante de Pix em tela de app, títulos em roxo, " +
+			"seções Valor, Destino e Origem\"; never its amounts, dates, names or numbers; empty for typed text"),
+		"remembered": map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string", "enum": receipt.LessonFields},
+			"description": "the fields you filled from one of the person's lessons rather than from the receipt itself; empty when none",
+		},
 	}))
 }

@@ -42,6 +42,13 @@ type Input struct {
 	Text       string
 	Today      time.Time
 	Categories []Category
+	Lessons    []Lesson
+}
+
+type Lesson struct {
+	When  string
+	Field string
+	Value string
 }
 
 type Correction struct {
@@ -161,6 +168,14 @@ func userText(in Input) string {
 		b.WriteString(" The person typed this purchase:\n\n" + text)
 	case text != "":
 		b.WriteString(" The person sent it with this message:\n\n" + text)
+	}
+	if len(in.Lessons) > 0 {
+		b.WriteString("\n\nWhat the person taught you by correcting earlier receipts, newest first. Use a lesson only " +
+			"when this receipt matches it and does not itself show that field; when two disagree, the newer wins. " +
+			"List in remembered every field you filled from one.\n")
+		for _, l := range in.Lessons {
+			fmt.Fprintf(&b, "\n- %s: %s = %q", l.When, l.Field, l.Value)
+		}
 	}
 	return b.String()
 }

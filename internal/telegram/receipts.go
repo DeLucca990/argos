@@ -149,7 +149,7 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 	}
 
 	res, err := b.extractor.Extract(ctx, extract.Input{MIME: in.mime, Data: in.data, Text: in.text, Today: now,
-		Categories: cats.forModel("")})
+		Categories: cats.forModel(""), Lessons: b.lessonsFor(ctx, user.ID, cats)})
 	record := b.recordOf(user.ID, att.ID, res, err)
 	logRead(user, res, err)
 	if err != nil {
