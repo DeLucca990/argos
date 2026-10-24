@@ -134,9 +134,9 @@ func DataDir() (string, error) {
 	dir := envOr(DataDirEnv, defaultDataDir)
 	if err := writable(dir); err != nil {
 		return dir, fmt.Errorf(
-			"%s=%s is not writable (%v): under Docker it is the argos-data volume, which the image "+
-				"creates owned by its user; one created first by another container belongs to root — "+
-				"docker run --rm -v argos-data:/data alpine chown -R 65532:65532 /data",
+			"%s=%s is not writable (%v): under Docker, a folder mounted there must belong to the "+
+				"user the service runs as — sudo chown -R 1000:1000 data — and the argos-data volume "+
+				"to the image's user — docker run --rm -v argos-data:/data alpine chown -R 65532:65532 /data",
 			DataDirEnv, dir, err)
 	}
 	return dir, nil

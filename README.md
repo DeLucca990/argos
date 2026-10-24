@@ -22,24 +22,28 @@ from [@userinfobot](https://t.me/userinfobot) and an Anthropic API key from
 [platform.claude.com](https://platform.claude.com).
 
 ```sh
-mkdir -p config/argos/data
-curl -fsSL -o config/argos/.env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
-chmod 600 config/argos/.env   # TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, ANTHROPIC_API_KEY
+mkdir -p data
+curl -fsSL -o .env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
+chmod 600 .env   # TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_USER_IDS, ANTHROPIC_API_KEY
 ```
 
-A `compose.yml` beside `config/`:
+A `compose.yml` beside it:
 
 ```yaml
 services:
   argos:
     image: pedrodl/argos-bot:latest
     container_name: argos
-    user: "1000:1000"   # the owner of config/argos/data: id -u, id -g
-    env_file: ./config/argos/.env
+    user: "1000:1000"
+    env_file: .env
     volumes:
-      - ./config/argos/data:/data
+      - ./data:/data
     restart: unless-stopped
 ```
+
+`user` is the owner of `data/` — `id -u`:`id -g`, 1000 for Ubuntu's first user — so the files
+the bot writes are yours. Create the folder before the first start: one that Docker creates
+belongs to root, and the bot will not start in it.
 
 ```sh
 docker compose up -d                          # start

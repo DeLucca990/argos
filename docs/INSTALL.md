@@ -12,10 +12,11 @@ arm64. It needs no source: a `.env` with the settings, and a place for the data.
 3. [platform.claude.com](https://platform.claude.com) → API keys: `ANTHROPIC_API_KEY`. Every
    receipt read is a billed call, around two cents on Opus 5.5.
 
+In the folder the `compose.yml` will go in:
+
 ```sh
-mkdir -p config/argos
-curl -fsSL -o config/argos/.env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
-chmod 600 config/argos/.env   # fill in the three above; the rest is optional
+curl -fsSL -o .env https://raw.githubusercontent.com/DeLucca990/argos-finance-bot/main/.env.example
+chmod 600 .env   # fill in the three above; the rest is optional
 ```
 
 The bot fetches its messages from Telegram, so no port needs opening.
@@ -23,7 +24,7 @@ The bot fetches its messages from Telegram, so no port needs opening.
 ## On a Linux server: a folder
 
 ```sh
-mkdir config/argos/data
+mkdir data
 ```
 
 ```yaml
@@ -32,9 +33,9 @@ services:
     image: pedrodl/argos-bot:latest
     container_name: argos
     user: "1000:1000"
-    env_file: ./config/argos/.env
+    env_file: .env
     volumes:
-      - ./config/argos/data:/data
+      - ./data:/data
     restart: unless-stopped
 ```
 
@@ -55,7 +56,7 @@ services:
   argos:
     image: pedrodl/argos-bot:latest
     container_name: argos
-    env_file: ./config/argos/.env
+    env_file: .env
     volumes:
       - argos-data:/data
     restart: unless-stopped
@@ -93,10 +94,10 @@ in [DETAILS.md](DETAILS.md#configuration).
 ## Without compose
 
 ```sh
-docker run -d --name argos --env-file config/argos/.env -v argos-data:/data --restart unless-stopped pedrodl/argos-bot:latest
+docker run -d --name argos --env-file .env -v argos-data:/data --restart unless-stopped pedrodl/argos-bot:latest
 ```
 
-or, with a folder, `--user "$(id -u):$(id -g)" -v "$PWD/config/argos/data":/data`. A container
+or, with a folder, `--user "$(id -u):$(id -g)" -v "$PWD/data":/data`. A container
 keeps the options it was created with, so updating is creating it again with the same ones:
 
 ```sh
@@ -120,7 +121,7 @@ docker run --rm -v argos-data:/data alpine tar -C /data/backups -cf - . | tar -x
 To move from the volume to a folder, stop the bot, then:
 
 ```sh
-mkdir -p config/argos/data
-docker run --rm -v argos-data:/from -v "$PWD/config/argos/data":/to alpine \
+mkdir -p data
+docker run --rm -v argos-data:/from -v "$PWD/data":/to alpine \
   sh -c "cp -a /from/. /to/ && chown -R $(id -u):$(id -g) /to"
 ```
