@@ -19,7 +19,6 @@ import (
 
 func main() {
 	log.SetOutput(os.Stderr)
-	log.SetPrefix("[argos] ")
 
 	dotenv.LoadEnvVariables()
 
