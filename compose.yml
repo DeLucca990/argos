@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
 
   sqlite:
-    build:
+    build: &sqlite-image
       dockerfile_inline: |
         FROM alpine:3.22
         RUN apk add --no-cache sqlite
@@ -44,6 +44,24 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+
+  sqlite-ro:
+    build: *sqlite-image
+    image: argos-sqlite:latest
+    container_name: argos-sqlite-ro
+    profiles: [db-ro]
+    depends_on: [argos]
+    command: ["sleep", "infinity"]
+    init: true
+    user: "65532:65532"
+    environment:
+      - HOME=/tmp
+    volumes:
+      - argos-data:/data:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
 
 volumes:
   argos-data:

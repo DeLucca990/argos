@@ -145,6 +145,34 @@ still holds — foreign keys are on, so deleting a user who has expenses fails, 
 payment method outside the allowed values is refused — but nothing the bot does on its own
 happens, such as `updated_at` or `confirmed_at` being set. `make db-copy` first is cheap.
 
+#### For an agent, through `docker exec`
+
+The bot's container has nothing to exec into, so a tool that only runs commands in running
+containers — an MCP server such as Nautilus, with its `docker_container_exec` — cannot read the
+database through it. `sqlite-ro` is that place: a container that only waits, with `sqlite3` and
+the volume mounted read-only. It is a profile too, started after the bot:
+
+```sh
+make db-ro          # argos-sqlite-ro — and again after every reboot, until make db-ro-stop
+```
+
+A query is then one command, with no shell in between:
+
+```sh
+docker exec argos-sqlite-ro sqlite3 -readonly -box /data/argos.db \
+  "SELECT id, merchant, total_cents FROM expenses ORDER BY id DESC LIMIT 20"
+```
+
+For Nautilus, `argos-sqlite-ro` goes in `NAUTILUS_ALLOW_CONTAINER_NAMES`, and the command is the
+same argument vector: `["sqlite3", "-readonly", "-box", "/data/argos.db", "SELECT ..."]`. Its
+output is cut at 16 KB, so a `LIMIT` keeps the answer whole.
+
+The mount is what makes it safe to hand to something that is not you: with the volume read-only,
+nothing run there changes the data, `-readonly` or not — an `UPDATE` fails with `attempt to write
+a readonly database`. It does mean it reads only while the bot is running. In WAL mode, a reader
+that cannot write needs the `-wal` and `-shm` files the bot keeps while it has the database open;
+with the bot stopped they are gone, and the answer is `unable to open database file`.
+
 ### Without Docker
 
 ```sh
