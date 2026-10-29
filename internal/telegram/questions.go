@@ -22,12 +22,16 @@ type asker interface {
 var questionStarts = []string{
 	"quanto", "quanta", "quantos", "quantas", "qual", "quais", "quando", "onde", "como", "quem",
 	"o que", "por que", "porque", "mostra", "mostre", "me mostra", "lista", "liste", "compara", "compare",
-	"resume", "resuma",
+	"resume", "resuma", "resumo", "faça", "faz", "me faça", "me faz", "me dá", "me dê", "me diga", "me diz",
+	"gere", "gera", "calcule", "calcula",
 }
 
 func isQuestion(text string) bool {
 	t := strings.ToLower(strings.TrimSpace(text))
 	if strings.Contains(t, "?") {
+		return true
+	}
+	if !hasDigit(t) && len(strings.Fields(t)) > 1 {
 		return true
 	}
 	for _, w := range questionStarts {

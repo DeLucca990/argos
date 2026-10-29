@@ -25,18 +25,23 @@ func (f *fakeAsker) Ask(_ context.Context, _ int64, q string, _ time.Time) (ask.
 
 func TestIsQuestion(t *testing.T) {
 	for text, want := range map[string]bool{
-		"quanto gastei em 2026?":                true,
-		"Quanto gastei com mercado em setembro": true,
-		"qual foi meu maior gasto":              true,
-		"o que eu mais comprei":                 true,
-		"me mostra os gastos de ontem":          true,
-		"compara setembro e outubro":            true,
-		"almoço 35,90 no pix":                   false,
-		"uber 23,50 ontem":                      false,
-		"comi pizza 50":                         false,
-		"quantia 30":                            false,
-		"gastei 30 no mercado":                  false,
-		"oi":                                    false,
+		"quanto gastei em 2026?":                                     true,
+		"Quanto gastei com mercado em setembro":                      true,
+		"qual foi meu maior gasto":                                   true,
+		"o que eu mais comprei":                                      true,
+		"me mostra os gastos de ontem":                               true,
+		"compara setembro e outubro":                                 true,
+		"Faça um resumo financeiro de todos os gastos até o momento": true,
+		"faça um resumo dos gastos de 2026":                          true,
+		"me dá o total de outubro de 2026":                           true,
+		"gastos por categoria":                                       true,
+		"obrigado":                                                   false,
+		"almoço 35,90 no pix":                                        false,
+		"uber 23,50 ontem":                                           false,
+		"comi pizza 50":                                              false,
+		"quantia 30":                                                 false,
+		"gastei 30 no mercado":                                       false,
+		"oi":                                                         false,
 	} {
 		if got := isQuestion(text); got != want {
 			t.Errorf("isQuestion(%q) = %v", text, got)

@@ -398,10 +398,13 @@ Em setembro você gastou R$ 388,00, em 3 gastos:
 ≈ US$ 0,0300
 ```
 
-**What counts as a question.** A message with a `?`, or one that starts with quanto, qual,
-quais, quando, onde, como, quem, o que, por que, mostra, lista, compara or resume. Anything else
-with a number in it is still a purchase — *almoço 35,90 no pix* — which is why *quanto gastei em
-2026?* needs its question word or its `?` to be read as one.
+**What counts as a question.** A message with a `?`; one that starts with a question word or a
+request — quanto, qual, quando, onde, como, quem, o que, por que, mostra, lista, compara, resume,
+faça, me dá, gere, calcule and a few more; or any text of more than one word without a number,
+since that cannot be a purchase — *faça um resumo de todos os gastos*. Anything else with a
+number in it is still a purchase — *almoço 35,90 no pix* — which is why *quanto gastei em 2026?*
+needs its question word or its `?` to be read as one. A single word with no number, *oi*, gets
+the help.
 
 **How it is answered.** Claude gets three tools and nothing else, all reading, none writing,
 each scoped to the asker's saved expenses:
