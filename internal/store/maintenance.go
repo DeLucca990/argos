@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
+
+const backupLayout = "2006-01-02-150405"
 
 func (s *Store) RememberCard(ctx context.Context, chatID int64, messageID int, expenseID int64) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO cards (chat_id, message_id, expense_id) VALUES (?, ?, ?)
@@ -47,31 +50,55 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.db.QueryRowContext(ctx, `SELECT 1`).Scan(&one)
 }
 
-// DailyBackup writes today's backup into dir unless it exists, and keeps the newest keep.
-func (s *Store) DailyBackup(ctx context.Context, dir string, keep int, now time.Time) (written string, removed int, err error) {
+// ScheduledBackup writes a backup once the newest in dir is every old, keeps the newest keep, and
+// says when the next is due; a backup's time is read from its name, so restarts do not add any.
+func (s *Store) ScheduledBackup(ctx context.Context, dir string, keep int, every time.Duration, now time.Time) (written string, removed int, next time.Time, err error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return "", 0, err
+		return "", 0, time.Time{}, err
 	}
-	file := filepath.Join(dir, "argos-"+now.Format("2006-01-02")+".db")
-	if _, err := os.Stat(file); errors.Is(err, os.ErrNotExist) {
+	files, err := filepath.Glob(filepath.Join(dir, "argos-*.db"))
+	if err != nil {
+		return "", 0, time.Time{}, err
+	}
+	type backup struct {
+		file string
+		at   time.Time
+	}
+	var backups []backup
+	for _, f := range files {
+		if at, ok := backupTime(f, now.Location()); ok {
+			backups = append(backups, backup{f, at})
+		}
+	}
+	sort.Slice(backups, func(i, j int) bool { return backups[i].at.Before(backups[j].at) })
+
+	if len(backups) == 0 || !now.Before(backups[len(backups)-1].at.Add(every)) {
+		file := filepath.Join(dir, "argos-"+now.Format(backupLayout)+".db")
 		if err := s.Backup(ctx, file); err != nil {
-			return "", 0, err
+			return "", 0, time.Time{}, err
 		}
 		written = file
+		backups = append(backups, backup{file, now})
 	}
+	next = backups[len(backups)-1].at.Add(every)
 
-	old, err := filepath.Glob(filepath.Join(dir, "argos-*.db"))
-	if err != nil {
-		return written, 0, err
-	}
-	sort.Strings(old)
-	for len(old) > keep {
-		if err := os.Remove(old[0]); err != nil {
-			return written, removed, err
+	for len(backups) > keep {
+		if err := os.Remove(backups[0].file); err != nil {
+			return written, removed, next, err
 		}
-		old, removed = old[1:], removed+1
+		backups, removed = backups[1:], removed+1
 	}
-	return written, removed, nil
+	return written, removed, next, nil
+}
+
+func backupTime(file string, loc *time.Location) (time.Time, bool) {
+	name := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(file), "argos-"), ".db")
+	for _, layout := range []string{backupLayout, "2006-01-02"} {
+		if at, err := time.ParseInLocation(layout, name, loc); err == nil {
+			return at, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (s *Store) DigestSent(ctx context.Context, userID int64, month string) (bool, error) {

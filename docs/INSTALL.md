@@ -107,7 +107,8 @@ docker pull pedrodl/argos-bot:latest && docker rm -f argos && docker run -d --na
 ## The data
 
 `/data` holds the database `argos.db`, the receipt files and `backups/`, where the bot writes a
-consistent copy of the database every day and keeps the newest 14. Copy those rather than the
+consistent copy of the database every day and keeps the newest 14 — `ARGOS_BACKUP_EVERY` and
+`ARGOS_BACKUP_KEEP` change both. Copy those rather than the
 live `argos.db`, which can come out inconsistent while the bot writes. In a folder they are plain
 files; out of a volume:
 

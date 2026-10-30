@@ -22,7 +22,6 @@ import (
 
 const (
 	bankPrefix   = "bk:"
-	bankTick     = time.Hour
 	bankTimeout  = 5 * time.Minute
 	bankOverlap  = 30
 	bankBatch    = 40
@@ -95,7 +94,7 @@ func (b *Bot) connectHelp(telegramID int64) string {
 		"abra <i>Demo</i> → <i>Connect Account</i>, escolha <b>MeuPluggy</b> e entre.\n" +
 		"3. Em <i>Connected Items</i>, abra o item de cada banco e copie o id.\n" +
 		"4. Mande aqui: <code>/conectar 6f1b8a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b</code>\n\n" +
-		"Eu importo os gastos desde o dia 1º deste mês e, daí em diante, confiro a cada hora. " +
+		"Eu importo os gastos desde o dia 1º deste mês e, daí em diante, confiro " + everyText(b.cfg.BankEvery) + ". " +
 		"Os comprovantes continuam valendo: um gasto que você já mandou não entra de novo pelo banco." +
 		b.ownNote(telegramID)
 }
@@ -154,7 +153,7 @@ func (b *Bot) connect(ctx context.Context, user store.User, id string) (reply, b
 	s, err := b.syncItem(ctx, api, item, true)
 	if err != nil {
 		log.Printf("user %d: first import from Pluggy item %s: %v", user.ID, id, err)
-		return reply{text: "🏦 Conectei, mas a primeira importação falhou. Tento de novo na próxima hora; " +
+		return reply{text: "🏦 Conectei, mas a primeira importação falhou. Tento de novo na próxima conferência; " +
 			"/bancos mostra como está."}, s
 	}
 	var text strings.Builder
@@ -162,7 +161,7 @@ func (b *Bot) connect(ctx context.Context, user store.User, id string) (reply, b
 	if labels := accountLabels(s.connector, s.accounts); len(labels) > 0 {
 		text.WriteString("Contas: " + html.EscapeString(strings.Join(labels, ", ")) + "\n")
 	}
-	text.WriteString("\n" + syncText(s) + "\n\nDaqui em diante eu confiro a cada hora e mando os gastos novos. " +
+	text.WriteString("\n" + syncText(s) + "\n\nDaqui em diante eu confiro " + everyText(b.cfg.BankEvery) + " e mando os gastos novos. " +
 		"/bancos mostra as conexões.")
 	return reply{text: text.String()}, s
 }
@@ -277,7 +276,7 @@ func (b *Bot) refreshBankMenu(ctx context.Context, user store.User, chatID int64
 }
 
 func (b *Bot) runBankSync(ctx context.Context) {
-	t := time.NewTicker(bankTick)
+	t := time.NewTicker(b.cfg.BankEvery)
 	defer t.Stop()
 	for {
 		b.syncAll(ctx)
@@ -845,7 +844,7 @@ func syncText(s bankSync) string {
 	}
 	if s.waiting > 0 {
 		parts = append(parts, fmt.Sprintf("⏳ %d %s a leitura — o teto diário foi atingido ou a leitura falhou; "+
-			"tento de novo na próxima hora.", s.waiting, plural(s.waiting, "espera", "esperam")))
+			"tento de novo na próxima conferência.", s.waiting, plural(s.waiting, "espera", "esperam")))
 	}
 	if len(s.added) > bankCards {
 		parts = append(parts, fmt.Sprintf("Mostro os %d mais recentes; os outros estão em /ultimos.", bankCards))
@@ -859,6 +858,25 @@ func logSync(s bankSync) {
 	}
 	log.Printf("bank: user %d, item %d: %d added, %d matched to receipts, %d came through another connection, "+
 		"%d not spending, %d waiting", s.item.UserID, s.item.ID, len(s.added), s.matched, s.carried, s.ignored, s.waiting)
+}
+
+func everyText(d time.Duration) string {
+	day := 24 * time.Hour
+	switch {
+	case d == day:
+		return "uma vez por dia"
+	case d%day == 0:
+		return fmt.Sprintf("a cada %d dias", d/day)
+	case d == time.Hour:
+		return "a cada hora"
+	case d%time.Hour == 0:
+		return fmt.Sprintf("a cada %d horas", d/time.Hour)
+	case d == time.Minute:
+		return "a cada minuto"
+	case d < time.Hour:
+		return fmt.Sprintf("a cada %d minutos", d/time.Minute)
+	}
+	return fmt.Sprintf("a cada %dh%02d", d/time.Hour, d%time.Hour/time.Minute)
 }
 
 func firstOfMonth(t time.Time) time.Time {

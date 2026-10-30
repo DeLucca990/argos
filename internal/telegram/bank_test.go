@@ -416,6 +416,18 @@ func TestItemName(t *testing.T) {
 	}
 }
 
+func TestEveryText(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		time.Minute: "a cada minuto", 30 * time.Minute: "a cada 30 minutos", time.Hour: "a cada hora",
+		6 * time.Hour: "a cada 6 horas", 90 * time.Minute: "a cada 1h30", 24 * time.Hour: "uma vez por dia",
+		48 * time.Hour: "a cada 2 dias", 36 * time.Hour: "a cada 36 horas",
+	} {
+		if got := everyText(d); got != want {
+			t.Errorf("%v: %q, want %q", d, got, want)
+		}
+	}
+}
+
 func TestWhenOf(t *testing.T) {
 	on, clock := whenOf(bareDate("2026-10-19"))
 	if !on.Equal(time.Date(2026, 10, 19, 0, 0, 0, 0, time.Local)) || clock != "" {

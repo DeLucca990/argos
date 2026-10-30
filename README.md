@@ -61,8 +61,9 @@ gastei com mercado em setembro?* Add categories of your own with the ➕ at the 
 `/categorias`. `/help` lists the commands.
 
 Or connect your banks through Open Finance, with [Pluggy](https://pluggy.ai), and the expenses
-come in on their own, once an hour — receipts keep working, and a purchase sent both ways is kept
-once. Each person needs a Pluggy application of their own, its credentials in `.env`; see
+come in on their own, once an hour or as often as `PLUGGY_SYNC_EVERY` says — receipts keep
+working, and a purchase sent both ways is kept once. Each person needs a Pluggy application of
+their own, its credentials in `.env`; see
 [docs/DETAILS.md](docs/DETAILS.md#importing-from-the-bank).
 
 ## More

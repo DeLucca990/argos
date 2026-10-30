@@ -55,7 +55,9 @@ func runBot() {
 	}
 
 	if cfg.BackupKeep > 0 {
-		go backups(ctx, st, filepath.Join(cfg.DataDir, "backups"), cfg.BackupKeep)
+		dir := filepath.Join(cfg.DataDir, "backups")
+		log.Printf("backups to %s every %s, keeping the newest %d", dir, cfg.BackupEvery, cfg.BackupKeep)
+		go backups(ctx, st, dir, cfg.BackupKeep, cfg.BackupEvery)
 	}
 
 	bot.Run(ctx)
@@ -85,21 +87,21 @@ func openStore(dir string) *store.Store {
 	return st
 }
 
-func backups(ctx context.Context, st *store.Store, dir string, keep int) {
-	t := time.NewTicker(time.Hour)
-	defer t.Stop()
+func backups(ctx context.Context, st *store.Store, dir string, keep int, every time.Duration) {
 	for {
-		written, removed, err := st.DailyBackup(ctx, dir, keep, time.Now())
+		written, removed, next, err := st.ScheduledBackup(ctx, dir, keep, every, time.Now())
+		wait := min(time.Until(next), time.Hour)
 		switch {
 		case err != nil:
 			log.Printf("backup: %v", err)
+			wait = min(every, time.Hour)
 		case written != "":
 			log.Printf("backup: wrote %s, keeping the newest %d, removed %d", written, keep, removed)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-time.After(max(wait, time.Second)):
 		}
 	}
 }

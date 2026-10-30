@@ -126,22 +126,44 @@ func TestBackup(t *testing.T) {
 	}
 }
 
-func TestDailyBackupKeepsTheNewest(t *testing.T) {
+func TestScheduledBackupKeepsTheNewest(t *testing.T) {
 	s := open(t)
 	dir := filepath.Join(t.TempDir(), "backups")
-	day := time.Date(2026, 10, 1, 3, 0, 0, 0, time.Local)
+	start := time.Date(2026, 10, 1, 3, 0, 0, 0, time.Local)
 	for i := range 5 {
-		if written, _, err := s.DailyBackup(ctx, dir, 3, day.AddDate(0, 0, i)); err != nil || written == "" {
-			t.Fatalf("day %d: %q, %v", i, written, err)
+		at := start.Add(time.Duration(i) * 6 * time.Hour)
+		written, _, next, err := s.ScheduledBackup(ctx, dir, 3, 6*time.Hour, at)
+		if err != nil || written == "" || !next.Equal(at.Add(6*time.Hour)) {
+			t.Fatalf("backup %d: %q, next %v, %v", i, written, next, err)
 		}
 	}
-	written, removed, err := s.DailyBackup(ctx, dir, 3, day.AddDate(0, 0, 4))
-	if err != nil || written != "" || removed != 0 {
-		t.Errorf("a second run the same day: %q, %d, %v", written, removed, err)
+	last := start.Add(24 * time.Hour)
+	written, removed, next, err := s.ScheduledBackup(ctx, dir, 3, 6*time.Hour, last.Add(5*time.Hour+59*time.Minute))
+	if err != nil || written != "" || removed != 0 || !next.Equal(last.Add(6*time.Hour)) {
+		t.Errorf("before it is due: %q, %d, next %v, %v", written, removed, next, err)
 	}
 	files, _ := filepath.Glob(filepath.Join(dir, "*"))
-	if len(files) != 3 || filepath.Base(files[0]) != "argos-2026-10-03.db" || filepath.Base(files[2]) != "argos-2026-10-05.db" {
+	if len(files) != 3 || filepath.Base(files[0]) != "argos-2026-10-01-150000.db" || filepath.Base(files[2]) != "argos-2026-10-02-030000.db" {
 		t.Errorf("kept %v", files)
+	}
+}
+
+func TestScheduledBackupAfterDailyOnes(t *testing.T) {
+	s := open(t)
+	dir := t.TempDir()
+	for _, name := range []string{"argos-2026-10-19.db", "argos-2026-10-20.db", "argos-copy.db"} {
+		os.WriteFile(filepath.Join(dir, name), nil, 0o600)
+	}
+	written, removed, _, err := s.ScheduledBackup(ctx, dir, 2, 24*time.Hour, time.Date(2026, 10, 20, 23, 0, 0, 0, time.Local))
+	if err != nil || written != "" || removed != 0 {
+		t.Errorf("a day's backup written that day, under its old name, is not due: %q, %d, %v", written, removed, err)
+	}
+	written, removed, _, err = s.ScheduledBackup(ctx, dir, 2, 24*time.Hour, time.Date(2026, 10, 21, 0, 30, 0, 0, time.Local))
+	if err != nil || filepath.Base(written) != "argos-2026-10-21-003000.db" || removed != 1 {
+		t.Errorf("the next day: %q, %d, %v", written, removed, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "argos-copy.db")); err != nil {
+		t.Errorf("a file that is not a backup was removed: %v", err)
 	}
 }
 

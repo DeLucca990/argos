@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
@@ -40,7 +41,7 @@ func TestRememberSavesTheSender(t *testing.T) {
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
 	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, ModelEnv, EffortEnv, anthropicKeyEnv, anthropicTokenEnv,
-		PluggyIDEnv, PluggySecretEnv} {
+		PluggyIDEnv, PluggySecretEnv, BackupEveryEnv, BankEveryEnv} {
 		t.Setenv(k, kv[k])
 	}
 }
@@ -154,6 +155,30 @@ func TestConfigPluggyPerPerson(t *testing.T) {
 	} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("the error lacks %q:\n%v", want, err)
+		}
+	}
+}
+
+func TestConfigIntervals(t *testing.T) {
+	base := map[string]string{TokenEnv: "123:abc", AllowedUsersEnv: "42", DataDirEnv: t.TempDir(), anthropicKeyEnv: "x"}
+	setEnv(t, base)
+	if cfg, err := LoadConfig(); err != nil || cfg.BackupEvery != 24*time.Hour || cfg.BankEvery != time.Hour {
+		t.Errorf("defaults: backups every %v, bank every %v, %v", cfg.BackupEvery, cfg.BankEvery, err)
+	}
+	for raw, want := range map[string]time.Duration{"6h": 6 * time.Hour, "1d": 24 * time.Hour, "7d": 7 * 24 * time.Hour,
+		"90m": 90 * time.Minute, "1h30m": 90 * time.Minute, "1m": time.Minute} {
+		base[BackupEveryEnv], base[BankEveryEnv] = raw, raw
+		setEnv(t, base)
+		if cfg, err := LoadConfig(); err != nil || cfg.BackupEvery != want || cfg.BankEvery != want {
+			t.Errorf("%q: %v and %v, %v", raw, cfg.BackupEvery, cfg.BankEvery, err)
+		}
+	}
+	for _, raw := range []string{"0", "30s", "90s", "-1h", "0d", "uma hora", "d"} {
+		base[BackupEveryEnv], base[BankEveryEnv] = raw, raw
+		setEnv(t, base)
+		_, err := LoadConfig()
+		if err == nil || !strings.Contains(err.Error(), BackupEveryEnv) || !strings.Contains(err.Error(), BankEveryEnv) {
+			t.Errorf("%q was accepted: %v", raw, err)
 		}
 	}
 }

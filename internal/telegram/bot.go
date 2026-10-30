@@ -99,7 +99,7 @@ func (b *Bot) Run(ctx context.Context) {
 			everyone = "everyone else with " + PluggyIDEnv
 		}
 		log.Printf("importing expenses from Pluggy every %s: %d user(s) with an application of their own, %s",
-			bankTick, len(b.ownBanks), everyone)
+			b.cfg.BankEvery, len(b.ownBanks), everyone)
 		go b.runBankSync(ctx)
 	} else {
 		log.Printf("no bank imports (%s not set)", PluggyIDEnv)

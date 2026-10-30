@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -19,10 +20,12 @@ const (
 	EffortEnv       = "ARGOS_EFFORT"
 	DailyBudgetEnv  = "ARGOS_DAILY_BUDGET_USD"
 	BackupKeepEnv   = "ARGOS_BACKUP_KEEP"
+	BackupEveryEnv  = "ARGOS_BACKUP_EVERY"
 	DigestAtEnv     = "ARGOS_DIGEST_AT"
 	DeleteFilesEnv  = "ARGOS_DELETE_RECEIPTS"
 	PluggyIDEnv     = "PLUGGY_CLIENT_ID"
 	PluggySecretEnv = "PLUGGY_CLIENT_SECRET"
+	BankEveryEnv    = "PLUGGY_SYNC_EVERY"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
@@ -34,6 +37,8 @@ const (
 	defaultEffort  = "low"
 	defaultKeep    = 14
 	defaultDigest  = "09:00"
+	defaultBackup  = 24 * time.Hour
+	defaultBank    = time.Hour
 )
 
 var efforts = []string{"low", "medium", "high", "xhigh", "max"}
@@ -46,6 +51,8 @@ type Config struct {
 	Effort       string
 	DailyBudget  float64
 	BackupKeep   int
+	BackupEvery  time.Duration
+	BankEvery    time.Duration
 	DigestAt     *DailyAt
 	DeleteFiles  bool
 	Pluggy       PluggyCredentials
@@ -111,9 +118,24 @@ func LoadConfig() (Config, error) {
 	if raw := env(BackupKeepEnv); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 0 {
-			problems = append(problems, fmt.Sprintf("%s=%q: must be how many daily backups to keep, 0 for none", BackupKeepEnv, raw))
+			problems = append(problems, fmt.Sprintf("%s=%q: must be how many backups to keep, 0 for none", BackupKeepEnv, raw))
 		}
 		cfg.BackupKeep = n
+	}
+
+	for _, every := range []struct {
+		key      string
+		fallback time.Duration
+		to       *time.Duration
+	}{{BackupEveryEnv, defaultBackup, &cfg.BackupEvery}, {BankEveryEnv, defaultBank, &cfg.BankEvery}} {
+		*every.to = every.fallback
+		if raw := env(every.key); raw != "" {
+			d, err := parseEvery(raw)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s=%q: %v", every.key, raw, err))
+			}
+			*every.to = d
+		}
 	}
 
 	if raw := env(DeleteFilesEnv); raw != "" {
@@ -185,6 +207,18 @@ func parseUserIDs(raw string) (map[int64]bool, error) {
 		ids[id] = true
 	}
 	return ids, nil
+}
+
+func parseEvery(raw string) (time.Duration, error) {
+	d, err := time.ParseDuration(raw)
+	if days, ok := strings.CutSuffix(raw, "d"); ok {
+		n, nerr := strconv.Atoi(days)
+		d, err = time.Duration(n)*24*time.Hour, nerr
+	}
+	if err != nil || d < time.Minute || d%time.Minute != 0 {
+		return 0, errors.New("must be whole minutes, at least 1m, such as 30m, 6h or 1d")
+	}
+	return d, nil
 }
 
 func pluggyUsers(environ []string, allowed map[int64]bool) (map[int64]PluggyCredentials, []string) {

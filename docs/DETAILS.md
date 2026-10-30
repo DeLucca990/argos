@@ -62,10 +62,14 @@ schema version:
 
 Outside Docker, the same is `ARGOS_DATA_DIR=./data go run ./cmd/argos migrate`.
 
-**Backups.** Once an hour the bot checks for today's backup and, when there is none, writes one
-with `VACUUM INTO` — a consistent copy even mid-write — to `/data/backups/argos-YYYY-MM-DD.db`,
-keeping the newest `ARGOS_BACKUP_KEEP` (14 unless set, 0 for none). They are in the same volume,
-so they cover a bad edit or a broken database, not a lost disk; to take them off the machine:
+**Backups.** Every `ARGOS_BACKUP_EVERY` (a day unless set: `6h`, `30m`, `7d`) the bot writes one
+with `VACUUM INTO` — a consistent copy even mid-write — to
+`/data/backups/argos-YYYY-MM-DD-HHMMSS.db`, keeping the newest `ARGOS_BACKUP_KEEP` (14 unless
+set, 0 for none) — backups, not days: every 6 hours, 14 cover three and a half days. When the
+next one is due is counted from the time in the newest one's name, so restarting the bot writes
+none early; one written as `argos-YYYY-MM-DD.db`, before the interval could be set, counts as
+written at midnight. They are in the same volume, so they cover a bad edit or a broken database,
+not a lost disk; to take them off the machine:
 
 ```sh
 make db-backups                    # copies them into ./backups, owned by you
@@ -311,7 +315,7 @@ The files themselves stay in `/data/receipts/`, in the volume, named by their sh
 `ARGOS_DELETE_RECEIPTS=true`. Then no file is ever written: the receipt is read from memory, and
 what stays is what was read off it and the file's sha256, which is all that telling a resent
 file apart needs, so that still costs nothing. Starting with it on also deletes the files kept
-until then, for good — the daily backups hold the database, not the images. What you lose is
+until then, for good — the backups hold the database, not the images. What you lose is
 the original to look at again, or to read anew with a better model.
 
 ## Importing from the bank
@@ -342,7 +346,8 @@ the credentials of each.
    ```
 
    The log says `importing expenses from Pluggy every 1h0m0s: 1 user(s) with an application of
-   their own, everyone else with PLUGGY_CLIENT_ID`. `/bancos` and `/conectar` appear in the menu
+   their own, everyone else with PLUGGY_CLIENT_ID` — every hour unless `PLUGGY_SYNC_EVERY` says
+   otherwise. `/bancos` and `/conectar` appear in the menu
    of whoever has an application — everyone's, with the pair without an id. Without any pair the
    bot reads receipts only, as before. Never send a secret through the chat: it would stay in
    Telegram's history; `/bancos` from someone without one says which two lines to add, with their id.
@@ -365,9 +370,11 @@ does not come in twice.
 
 ### What comes in
 
-On connecting, everything since the 1st of the month. After that, once an hour the bot asks
-Pluggy whether the item changed, and reads it only when it did — 30 days back from the last
-read, so a transaction a bank posts late still comes in.
+On connecting, everything since the 1st of the month. After that, every `PLUGGY_SYNC_EVERY` —
+an hour unless set — the bot asks Pluggy whether the item changed, and reads it only when it
+did — 30 days back from the last read, so a transaction a bank posts late still comes in. Meu
+Pluggy refreshes the banks once a day, so checking more often brings a day's transactions in
+sooner, not more of them; checking less often is fewer calls, and the same transactions later.
 
 - **Money out only**: debits from accounts and purchases on cards, pending or posted. Money in,
   refunds, the card's own bill payments, a Pix to the same CPF it came from and anything dated in
@@ -440,8 +447,8 @@ id changes, `/conectar` the new one and disconnect the old — what had come thr
 recognised by its Open Finance id, and not imported again.
 
 **Filing costs model calls**, text only, one per 40 transactions, shown apart in `/cost`. The
-daily budget holds them too: past it, transactions wait, and are filed on the first hourly check
-after midnight. A failed call waits the same way.
+daily budget holds them too: past it, transactions wait, and are filed on the first check after
+midnight. A failed call waits the same way.
 
 **Not followed**: a purchase cancelled while pending, a refund, an amount the bank changes after
 the transaction came in — fix those by hand. Nor does the bot listen for Pluggy's webhooks: it
@@ -604,11 +611,13 @@ a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
 | `ARGOS_MODEL` | `claude-opus-5-5` | the model that reads them |
 | `ARGOS_EFFORT` | `low` | `low`, `medium`, `high`, `xhigh` or `max`: how much it thinks before answering |
 | `ARGOS_DAILY_BUDGET_USD` | — | the most a day of model calls may cost before reading pauses until midnight; `1.50` or `1,50` |
-| `ARGOS_BACKUP_KEEP` | `14` | how many daily backups to keep in `/data/backups`; `0` turns them off |
+| `ARGOS_BACKUP_KEEP` | `14` | how many backups to keep in `/data/backups`; `0` turns them off |
+| `ARGOS_BACKUP_EVERY` | `1d` | how often to write one: whole minutes, at least `1m` — `30m`, `6h`, `1d`, `7d` |
 | `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
 | `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files: each is read from memory, and the ones kept before are deleted at startup |
 | `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` | — | a Pluggy application, to [import from banks](#importing-from-the-bank), for everyone without one of their own; neither for receipts only |
 | `PLUGGY_CLIENT_ID_<id>` / `PLUGGY_CLIENT_SECRET_<id>` | — | the Pluggy application of the person with that Telegram id, who must be in the allowlist |
+| `PLUGGY_SYNC_EVERY` | `1h` | how often to ask Pluggy whether a connection changed: whole minutes, at least `1m` — `30m`, `6h`, `1d` |
 | `TZ` | `America/Sao_Paulo` | the time zone of dates, `/hoje` and the digest; set in the image |
 | `ARGOS_DATA_DIR` | `/data` | where the `argos-data` volume is mounted; `make run`, outside Docker, sets `./data` |
 | `SQLITE_WEB_PASSWORD` | — | **required** by `make db-web` |

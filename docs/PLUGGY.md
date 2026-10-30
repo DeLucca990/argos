@@ -43,6 +43,7 @@ made-up transactions, refreshed weekly; a sandbox item not updated for 30 days i
 | --- | --- |
 | `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` | the application of everyone in the allowlist without one of their own |
 | `PLUGGY_CLIENT_ID_<telegram id>` / `PLUGGY_CLIENT_SECRET_<telegram id>` | the application of that person, who must be in `TELEGRAM_ALLOWED_USER_IDS` |
+| `PLUGGY_SYNC_EVERY` | how often to ask Pluggy about each connection: `1h` unless set, whole minutes, at least `1m` |
 
 Each pair is both or neither; startup names any variable that breaks that, a suffix that is not a
 numeric id, or an id not in the allowlist. Secrets go in `.env` only, never through the chat.
@@ -59,11 +60,11 @@ Base URL `https://api.pluggy.ai`. Every request sends `Accept: application/json`
 | Call | Pluggy reference | When |
 | --- | --- | --- |
 | `POST /auth` | [Create API Key](https://docs.pluggy.ai/en/reference/auth/auth-create) | before the first call, then whenever the key is 100 minutes old or refused |
-| `GET /items/{id}` | [Retrieve Item](https://docs.pluggy.ai/en/reference/items/items-retrieve) | on `/conectar`, then hourly for each connection |
+| `GET /items/{id}` | [Retrieve Item](https://docs.pluggy.ai/en/reference/items/items-retrieve) | on `/conectar`, then every `PLUGGY_SYNC_EVERY` (an hour unless set) for each connection |
 | `GET /accounts?itemId={id}` | [List Accounts](https://docs.pluggy.ai/en/reference/account/accounts-list) | only when the item changed since the last import, on `/conectar` and on 🔄 |
 | `GET /v2/transactions?accountId={id}&dateFrom={date}` | [List Transactions](https://docs.pluggy.ai/en/reference/transaction/transactions-list-by-cursor) | right after `/accounts`, once per account, page after page |
 
-In a quiet hour that is one call per connection. On a day the bank refreshed, it is
+A check with nothing new is one call per connection. On a day the bank refreshed, it is
 `2 + accounts` calls, more if an account has over a page of transactions. The examples below show
 only the fields the bot reads; Pluggy sends more.
 
@@ -90,7 +91,7 @@ A wrong pair answers `401` with a `message`, which the bot logs:
 ### `GET /items/{id}`
 
 The item's state. On `/conectar` it checks that the id exists in that person's application; every
-hour it decides whether there is anything to read.
+check it decides whether there is anything to read.
 
 ```json
 {
@@ -109,7 +110,7 @@ hour it decides whether there is anything to read.
 | `connector.name` | the connection's name in `/bancos` and the account on each expense — except `MeuPluggy`, which names no bank, where the accounts' own names are used |
 | `status` | `UPDATED` is up to date; `UPDATING`, `CREATING`, `MERGING` are updating; `LOGIN_ERROR`, `OUTDATED` and `WAITING_USER_INPUT` are trouble, told to the person once when the item turns to one |
 | `error.message`, else `error.code` | shown with the trouble |
-| `lastUpdatedAt` | compared, to the second, with the one of the last complete import (`bank_items.imported_upto`): the same means there is nothing new, and the hour stops here |
+| `lastUpdatedAt` | compared, to the second, with the one of the last complete import (`bank_items.imported_upto`): the same means there is nothing new, and the check stops here |
 | `consentExpiresAt` | `/bancos` warns in its last 30 days |
 
 The id is checked to be a UUID before any call, and lower-cased. A `404` makes the connection
