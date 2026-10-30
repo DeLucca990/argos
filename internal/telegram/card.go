@@ -32,12 +32,14 @@ type reply struct {
 	text      string
 	keyboard  *models.InlineKeyboardMarkup
 	expenseID int64
+	silent    bool
 }
 
 type details struct {
 	warnings   []string
 	notes      string
 	remembered []string
+	statement  string
 	usd        float64
 	model      string
 }
@@ -55,14 +57,20 @@ func (b *Bot) card(ctx context.Context, e store.Expense, picking bool) reply {
 }
 
 func (b *Bot) details(ctx context.Context, e store.Expense) details {
+	var d details
+	if t, err := b.store.BankTransactionFor(ctx, e.ID); err == nil {
+		d.statement = nonEmpty(t.Description, "—")
+	} else if !errors.Is(err, store.ErrNotFound) {
+		log.Printf("expense %d: reading its bank transaction: %v", e.ID, err)
+	}
 	x, err := b.store.ExtractionFor(ctx, e.ID)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
 			log.Printf("expense %d: reading its extraction: %v", e.ID, err)
 		}
-		return details{}
+		return d
 	}
-	d := details{usd: x.USD, model: x.Model}
+	d.usd, d.model = x.USD, x.Model
 	if total, err := b.store.ExpenseCost(ctx, e.ID); err == nil {
 		d.usd = total
 	}
@@ -84,7 +92,11 @@ func cardText(e store.Expense, d details, cats catalog) string {
 	if title == "" {
 		title = "Gasto"
 	}
-	s.WriteString("🧾 <b>" + html.EscapeString(title) + "</b>\n")
+	icon := "🧾"
+	if e.Source == store.SourceBank {
+		icon = "🏦"
+	}
+	s.WriteString(icon + " <b>" + html.EscapeString(title) + "</b>\n")
 	switch len(e.MerchantTaxID) {
 	case 14:
 		s.WriteString("CNPJ " + receipt.FormatTaxID(e.MerchantTaxID) + "\n")
@@ -119,8 +131,11 @@ func cardText(e store.Expense, d details, cats catalog) string {
 		}
 	}
 
-	if len(d.warnings) > 0 || d.notes != "" || len(d.remembered) > 0 {
+	if len(d.warnings) > 0 || d.notes != "" || len(d.remembered) > 0 || d.statement != "" {
 		s.WriteString("\n")
+		if d.statement != "" {
+			s.WriteString("🏦 No extrato: <i>" + html.EscapeString(d.statement) + "</i>\n")
+		}
 		for _, w := range d.warnings {
 			s.WriteString("⚠️ " + html.EscapeString(w) + "\n")
 		}

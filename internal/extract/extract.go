@@ -118,6 +118,17 @@ func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.
 	if err != nil {
 		return Result{}, err
 	}
+	res, err := x.send(ctx, system, blocks, s)
+	if err != nil {
+		return res, err
+	}
+	if err := json.Unmarshal([]byte(res.RawJSON), &res.Raw); err != nil {
+		return res, fmt.Errorf("%s answered something that is not the schema: %w", res.Model, err)
+	}
+	return res, nil
+}
+
+func (x *Extractor) send(ctx context.Context, system string, blocks []anthropic.BetaContentBlockParamUnion, s json.RawMessage) (Result, error) {
 	params := anthropic.BetaMessageNewParams{
 		Model:     x.model,
 		MaxTokens: maxTokens,
@@ -153,9 +164,6 @@ func (x *Extractor) call(ctx context.Context, system string, blocks []anthropic.
 		}
 	}
 	res.RawJSON = text.String()
-	if err := json.Unmarshal([]byte(res.RawJSON), &res.Raw); err != nil {
-		return res, fmt.Errorf("%s answered something that is not the schema: %w", resp.Model, err)
-	}
 	return res, nil
 }
 

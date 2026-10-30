@@ -16,6 +16,7 @@ import (
 
 	"github.com/DeLucca990/argos-bot/internal/ask"
 	"github.com/DeLucca990/argos-bot/internal/extract"
+	"github.com/DeLucca990/argos-bot/internal/pluggy"
 	"github.com/DeLucca990/argos-bot/internal/store"
 )
 
@@ -24,6 +25,8 @@ type Bot struct {
 	store     *store.Store
 	extractor extractor
 	asker     asker
+	bank      bankAPI
+	ownBanks  map[int64]bankAPI
 	tg        *bot.Bot
 	notify    func(ctx context.Context, chatID int64, text string) error
 
@@ -32,12 +35,23 @@ type Bot struct {
 
 	pendingMu sync.Mutex
 	pending   map[pendingKey]pending
+
+	syncMu sync.Mutex
 }
 
 func New(cfg Config, st *store.Store) (*Bot, error) {
 	b := &Bot{
 		cfg: cfg, store: st, slots: make(chan struct{}, maxConcurrency), now: time.Now,
 		extractor: extract.New(cfg.Model, cfg.Effort), asker: ask.New(cfg.Model, cfg.Effort, st),
+	}
+	if cfg.Pluggy.ID != "" {
+		b.bank = pluggy.New(cfg.Pluggy.ID, cfg.Pluggy.Secret)
+	}
+	for id, c := range cfg.PluggyUsers {
+		if b.ownBanks == nil {
+			b.ownBanks = map[int64]bankAPI{}
+		}
+		b.ownBanks[id] = pluggy.New(c.ID, c.Secret)
 	}
 
 	if err := os.MkdirAll(filepath.Join(cfg.DataDir, receiptsDir), 0o750); err != nil {
@@ -64,13 +78,7 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 }
 
 func (b *Bot) Run(ctx context.Context) {
-	var cmds []models.BotCommand
-	for _, c := range commands {
-		cmds = append(cmds, models.BotCommand{Command: c.name, Description: c.menuDescription()})
-	}
-	if _, err := b.tg.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: cmds}); err != nil {
-		log.Printf("telegram: could not publish the command list: %v", err)
-	}
+	b.publishCommands(ctx)
 
 	budget := "no daily budget"
 	if b.cfg.DailyBudget > 0 {
@@ -85,7 +93,44 @@ func (b *Bot) Run(ctx context.Context) {
 	} else {
 		log.Printf("monthly digest off (%s=off)", DigestAtEnv)
 	}
+	if b.banking() {
+		everyone := "nobody else"
+		if b.bank != nil {
+			everyone = "everyone else with " + PluggyIDEnv
+		}
+		log.Printf("importing expenses from Pluggy every %s: %d user(s) with an application of their own, %s",
+			bankTick, len(b.ownBanks), everyone)
+		go b.runBankSync(ctx)
+	} else {
+		log.Printf("no bank imports (%s not set)", PluggyIDEnv)
+	}
 	b.tg.Start(ctx)
+}
+
+func (b *Bot) publishCommands(ctx context.Context) {
+	if _, err := b.tg.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: menu(commandsFor(b.bank != nil))}); err != nil {
+		log.Printf("telegram: could not publish the command list: %v", err)
+	}
+	for id := range b.cfg.AllowedUsers {
+		scope := &models.BotCommandScopeChat{ChatID: id}
+		var err error
+		if b.bank == nil && b.ownBanks[id] != nil {
+			_, err = b.tg.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: menu(commandsFor(true)), Scope: scope})
+		} else {
+			_, err = b.tg.DeleteMyCommands(ctx, &bot.DeleteMyCommandsParams{Scope: scope})
+		}
+		if err != nil && !strings.Contains(err.Error(), "chat not found") {
+			log.Printf("telegram: the command list of user %d: %v", id, err)
+		}
+	}
+}
+
+func menu(list []command) []models.BotCommand {
+	var cmds []models.BotCommand
+	for _, c := range list {
+		cmds = append(cmds, models.BotCommand{Command: c.name, Description: c.menuDescription()})
+	}
+	return cmds
 }
 
 func onError(err error) {
@@ -177,6 +222,9 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 		case strings.HasPrefix(data, lessonPrefix):
 			b.onLessonCallback(ctx, u.CallbackQuery)
 			return
+		case strings.HasPrefix(data, bankPrefix):
+			b.onBankCallback(ctx, u.CallbackQuery)
+			return
 		}
 		b.onCallback(ctx, u.CallbackQuery)
 		return
@@ -206,7 +254,7 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	case hasDigit(msg.Text):
 		b.onText(ctx, msg)
 	default:
-		b.sendHTML(ctx, msg.Chat.ID, helpText())
+		b.sendHTML(ctx, msg.Chat.ID, b.helpText(userFrom(ctx).TelegramID))
 	}
 }
 
@@ -249,6 +297,7 @@ func (b *Bot) show(ctx context.Context, chatID int64, messageID int, r reply) in
 	if r.keyboard != nil {
 		params.ReplyMarkup = r.keyboard
 	}
+	params.DisableNotification = r.silent
 	sent, err := b.tg.SendMessage(ctx, params)
 	if err != nil {
 		log.Printf("telegram: sending to chat %d: %v", chatID, err)

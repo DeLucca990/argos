@@ -3,10 +3,11 @@
 A Telegram bot that keeps track of what you spend: send it a receipt — a photo, a PDF, or a line
 of text — and it extracts the purchase with Claude and stores it in SQLite.
 
-**Status: phase 5, under way.** It reads receipts, records them as they arrive, takes
-corrections in plain words, and answers what was spent — in commands, by day, week and month,
-and in questions asked in Portuguese. It backs itself up daily, reports its health, keeps to a
-daily budget if given one, and comes with an evaluation to choose its model by.
+**Status: phase 5, under way.** It reads receipts, records them as they arrive, imports from
+banks through Open Finance, takes corrections in plain words, and answers what was spent — in
+commands, by day, week and month, and in questions asked in Portuguese. It backs itself up daily,
+reports its health, keeps to a daily budget if given one, and comes with an evaluation to choose
+its model by.
 
 ## Running it
 
@@ -313,6 +314,139 @@ file apart needs, so that still costs nothing. Starting with it on also deletes 
 until then, for good — the daily backups hold the database, not the images. What you lose is
 the original to look at again, or to read anew with a better model.
 
+## Importing from the bank
+
+Receipts are one way in; the other is the bank itself, through Open Finance, by
+[Pluggy](https://pluggy.ai). Both work at once, and a purchase that arrives both ways is kept once.
+The calls to Pluggy themselves — endpoints, payloads, what each field becomes — are in
+[PLUGGY.md](PLUGGY.md).
+
+### Setting it up
+
+It runs on **Meu Pluggy**, Pluggy's free personal use: up to five connections, no commercial
+use, refreshed by the banks once a day — and only your own accounts, read by an application on
+your own Pluggy account. So **each person has an application of their own**, and the bot holds
+the credentials of each.
+
+1. At [dashboard.pluggy.ai](https://dashboard.pluggy.ai), create an application. Its row under
+   *Applications* shows the **Client ID**; its page generates the **Client Secret**, shown once.
+2. Whoever runs the bot puts them in `.env` and restarts it. A pair without a Telegram id is for
+   everyone in `TELEGRAM_ALLOWED_USER_IDS` without one of their own — in a bot of one person,
+   theirs; a pair ending in a Telegram id is that person's:
+
+   ```sh
+   PLUGGY_CLIENT_ID=...                    # yours
+   PLUGGY_CLIENT_SECRET=...
+   PLUGGY_CLIENT_ID_123456789=...          # the person whose Telegram id is 123456789
+   PLUGGY_CLIENT_SECRET_123456789=...
+   ```
+
+   The log says `importing expenses from Pluggy every 1h0m0s: 1 user(s) with an application of
+   their own, everyone else with PLUGGY_CLIENT_ID`. `/bancos` and `/conectar` appear in the menu
+   of whoever has an application — everyone's, with the pair without an id. Without any pair the
+   bot reads receipts only, as before. Never send a secret through the chat: it would stay in
+   Telegram's history; `/bancos` from someone without one says which two lines to add, with their id.
+3. At [meu.pluggy.ai](https://meu.pluggy.ai), sign up with the same account as the dashboard and
+   connect the banks.
+4. Back in the dashboard: the application's *Demo* → *Connect Account* → **MeuPluggy**, and sign
+   in. Not the bank's own connector — one that asks for the CPF and the bank's approval again is
+   the wrong one. Each bank connected in Meu Pluggy becomes an item.
+5. Under *Connected Items*, open each and copy its id, then send the bot `/conectar <id>`.
+
+`/conectar` alone sends steps 3 to 5. An item belongs to the Telegram user who connected it,
+nobody else can connect it while it is theirs, and it is read with that user's application.
+Whoever runs the server can read everyone's data — as with the receipts — and now holds each
+person's Pluggy secret too.
+
+Changing someone's credentials to an application that does not have their items makes those
+items unreachable: the bot says so once, and `/bancos` shows them as not found. Connect the items
+of the new application, then disconnect the old ones; as with a renewal, what already came in
+does not come in twice.
+
+### What comes in
+
+On connecting, everything since the 1st of the month. After that, once an hour the bot asks
+Pluggy whether the item changed, and reads it only when it did — 30 days back from the last
+read, so a transaction a bank posts late still comes in.
+
+- **Money out only**: debits from accounts and purchases on cards, pending or posted. Money in,
+  refunds, the card's own bill payments, a Pix to the same CPF it came from and anything dated in
+  the future — the installments still to come — are left out before any model sees them.
+- **Claude files the rest**, up to 40 transactions a call, with your categories and their hints:
+  a name people use (*iFood*, not *IFD\*IFOOD COM AGENCIA*), a short description, a category —
+  and whether it is spending at all. Paying the card's bill from the account, moving money to
+  another account of yours, investing and withdrawing cash are not, and are left out, so a
+  purchase on the card counts once.
+- **What it already knows** is not asked again: a transaction with a description the bank sent
+  before is filed like the last one — its name, description and category, including a category
+  you changed with the button or by replying to its card. One left out as not spending is left
+  out again.
+- The payment method, the account, the card's last four digits and the payee's CNPJ or CPF come
+  from the bank's data, not the model: *Crédito* on a card, *Pix*, *Boleto* or *Débito* from an
+  account. Through Meu Pluggy the account is the account's own name at the bank, since the
+  connector's name — MeuPluggy — says nothing; reply to a card to fix one.
+
+Each import is a message — how many, how much, how many were already there by receipt or had
+come through another connection, and how many were left out — followed by the cards of the
+newest ten, sent silently:
+
+```
+🏦 iFood
+📅 19/10/2026 · 💳 Crédito · Nubank Mastercard ···5678
+🛵 Delivery
+💰 R$ 35,90
+Jantar
+
+🏦 No extrato: IFD*IFOOD
+
+✅ Salvo.
+[ 🏷️ Categoria ] [ ❌ Descartar ]
+```
+
+They are expenses like any other: in every report, corrected by replying, discarded with the
+button. A discarded one never comes back from the bank.
+
+### Receipts and the bank together
+
+The same purchase both ways is kept once, whichever comes first:
+
+- a transaction of the same amount as an expense you sent, within two days of it, is linked to
+  that expense instead of becoming another — unless the receipt says it was paid in cash;
+- a receipt sent after the bank's transaction replaces it: the imported expense is discarded and
+  the transaction moves to the receipt's, which has the items and the store's own name.
+
+Either way that card says *🏦 No extrato*. What this gets wrong is two purchases of the same
+amount within two days, one by receipt and one only at the bank: the second is taken for the
+first. Discarding the receipt's expense, should it be the wrong one, takes the bank's with it.
+
+Pluggy's ids for a transaction are not forever. A bank sometimes deletes one and creates it again
+under a new id — when a pending purchase changes too much as it posts — and connecting a bank
+again makes a new item, whose accounts and transactions all have new ids. What does not change
+is the id the bank gives the transaction in Open Finance, which Pluggy passes on: a transaction
+whose Open Finance id came in before, through any connection of the same person, keeps the
+expense it had — discarded, if it was — and is not filed again. A transaction without one, as
+some banks send, is recognised only within its account: the same amount, within a week, as one
+that vanished from the listing.
+
+### Keeping it working
+
+`/bancos` lists the connections: whether each is up to date, since when it imports and when it
+last checked, with 🔄 to read Pluggy now and 🔌 to disconnect — the imports stop, and what came
+in stays. Connecting the item again later imports nothing twice.
+
+**The authorisation lasts a year** from step 4. `/bancos` warns in its last 30 days, and when
+Pluggy reports an item in error the bot says so, once. Renewing is step 4 again; when the item
+id changes, `/conectar` the new one and disconnect the old — what had come through the old one is
+recognised by its Open Finance id, and not imported again.
+
+**Filing costs model calls**, text only, one per 40 transactions, shown apart in `/cost`. The
+daily budget holds them too: past it, transactions wait, and are filed on the first hourly check
+after midnight. A failed call waits the same way.
+
+**Not followed**: a purchase cancelled while pending, a refund, an amount the bank changes after
+the transaction came in — fix those by hand. Nor does the bot listen for Pluggy's webhooks: it
+asks, Pluggy never calls it, so it needs no open port.
+
 ## Asking what was spent
 
 | Command | Answers |
@@ -325,6 +459,8 @@ the original to look at again, or to read anew with a better model.
 | `/exportar [mês \| tudo]` | a month, or everything, as a CSV file |
 | `/resumo [mês]` | the monthly digest below, for any month; the last closed one unless named |
 | `/categorias` | the default categories, then yours with their hints; ➕ to create one, and a button to edit or remove each |
+| `/bancos` | the banks connected through Open Finance, with buttons to read now and to disconnect — [above](#importing-from-the-bank) |
+| `/conectar [id]` | connects a bank by its Pluggy item id; alone, how to find one |
 | `/cost` | what the model calls cost today, in 7 days and in 30 — readings, corrections and questions apart — and the model making them |
 
 A month is `2026-10`, `10/2026`, `10`, `outubro` or `out`, with a year after the name if it is
@@ -471,6 +607,8 @@ a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
 | `ARGOS_BACKUP_KEEP` | `14` | how many daily backups to keep in `/data/backups`; `0` turns them off |
 | `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
 | `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files: each is read from memory, and the ones kept before are deleted at startup |
+| `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` | — | a Pluggy application, to [import from banks](#importing-from-the-bank), for everyone without one of their own; neither for receipts only |
+| `PLUGGY_CLIENT_ID_<id>` / `PLUGGY_CLIENT_SECRET_<id>` | — | the Pluggy application of the person with that Telegram id, who must be in the allowlist |
 | `TZ` | `America/Sao_Paulo` | the time zone of dates, `/hoje` and the digest; set in the image |
 | `ARGOS_DATA_DIR` | `/data` | where the `argos-data` volume is mounted; `make run`, outside Docker, sets `./data` |
 | `SQLITE_WEB_PASSWORD` | — | **required** by `make db-web` |
@@ -502,6 +640,8 @@ instead of skipping a step.
 | `extractions` | every call to the model: its raw answer, tokens and estimated cost |
 | `categories` | the sixteen defaults, kept once with no `user_id`, and each user's own — name, emoji, a hint of what goes in it, and when it was archived |
 | `lessons` | what each user taught by correcting: the field, the right value, and the kind of receipt or the recipient it applies to |
+| `bank_items` | each bank connection: its Pluggy item id, whose it is, its state, and since when it imports |
+| `bank_transactions` | every transaction taken from a bank, by its Pluggy id, and the expense it became or was matched to — none when it was not spending — so none comes in twice |
 
 Who may use the bot is still `TELEGRAM_ALLOWED_USER_IDS`; `users` records who did, and every
 expense and extraction belongs to one of them. Removing someone from the list stops them without
@@ -523,9 +663,10 @@ cmd/argos/           entrypoint: .env loading, the database, signal handling, ba
 cmd/eval/            make eval: reads your own receipts with a model and scores each field against what they say
 internal/dotenv/     reads a .env into the environment before the configuration is checked
 internal/receipt/    what a receipt is: amounts in cents, CNPJ/CPF/NFC-e checks, the warnings; imports nothing
-internal/extract/    Claude: the schema, the request, images made readable, corrections
+internal/extract/    Claude: the schema, the request, images made readable, corrections, filing bank transactions
 internal/ask/        Claude answering questions: the conversation, and the three read-only tools it may call
 internal/cost/       what each model call cost, at list prices, fallbacks included
+internal/pluggy/     the Pluggy API: signing in, items, accounts and transactions
 internal/store/      SQLite — migrations, expenses, reports; knows nothing of Telegram or Claude
 internal/telegram/   the bot — configuration, authorisation, the card and its buttons, commands
 ```

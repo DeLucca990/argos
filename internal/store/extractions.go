@@ -28,6 +28,7 @@ const (
 	KindReceipt    = "receipt"
 	KindCorrection = "correction"
 	KindQuestion   = "question"
+	KindBank       = "bank"
 )
 
 func (s *Store) ExtractionFor(ctx context.Context, expenseID int64) (Extraction, error) {

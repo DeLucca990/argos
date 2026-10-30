@@ -60,7 +60,13 @@ is saved and answered with a card; reply to the card to correct it. Ask in plain
 gastei com mercado em setembro?* Add categories of your own with the ➕ at the bottom of
 `/categorias`. `/help` lists the commands.
 
+Or connect your banks through Open Finance, with [Pluggy](https://pluggy.ai), and the expenses
+come in on their own, once an hour — receipts keep working, and a purchase sent both ways is kept
+once. Each person needs a Pluggy application of their own, its credentials in `.env`; see
+[docs/DETAILS.md](docs/DETAILS.md#importing-from-the-bank).
+
 ## More
 
 - [docs/INSTALL.md](docs/INSTALL.md) — Mac and Windows, `docker run`, image tags, backups
 - [docs/DETAILS.md](docs/DETAILS.md) — every setting and command, the database, running from source
+- [docs/PLUGGY.md](docs/PLUGGY.md) — the Pluggy API as the bot uses it: requirements, endpoints, payloads
