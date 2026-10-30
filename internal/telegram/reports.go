@@ -25,7 +25,9 @@ const (
 	maxDayLines   = 30
 )
 
-var sourceLabels = map[store.Source]string{store.SourcePhoto: "foto", store.SourcePDF: "pdf", store.SourceText: "texto"}
+var sourceLabels = map[store.Source]string{
+	store.SourcePhoto: "foto", store.SourcePDF: "pdf", store.SourceText: "texto", store.SourceBank: "banco",
+}
 
 type usageError struct{ msg string }
 
@@ -68,10 +70,22 @@ func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest str
 		}
 		b.show(ctx, chatID, 0, r)
 		return
+	case "bancos":
+		r, err := b.bankMenu(ctx, user)
+		if err != nil {
+			log.Printf("user %d: /bancos: %v", user.ID, err)
+			b.sendHTML(ctx, chatID, dbErrorText)
+			return
+		}
+		b.show(ctx, chatID, 0, r)
+		return
+	case "conectar":
+		b.onConnect(ctx, msg, rest)
+		return
 	case "cost":
 		text, err = b.costText(ctx, now)
 	default:
-		text = helpText()
+		text = b.helpText(user.TelegramID)
 	}
 
 	var usage usageError
@@ -306,6 +320,7 @@ func callsText(total int, calls map[string]int) string {
 		{store.KindReceipt, "leitura", "leituras"},
 		{store.KindCorrection, "correção", "correções"},
 		{store.KindQuestion, "pergunta", "perguntas"},
+		{store.KindBank, "leitura do banco", "leituras do banco"},
 	} {
 		switch n := calls[k.kind]; {
 		case n == 1:

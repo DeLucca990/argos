@@ -23,6 +23,7 @@ const (
 	SourcePhoto Source = "photo"
 	SourcePDF   Source = "pdf"
 	SourceText  Source = "text"
+	SourceBank  Source = "bank"
 )
 
 type Expense struct {
@@ -76,6 +77,15 @@ type querier interface {
 }
 
 func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
+	var id int64
+	err := s.inTx(ctx, func(tx *sql.Tx) (err error) {
+		id, err = s.insertExpense(ctx, tx, e)
+		return err
+	})
+	return id, err
+}
+
+func (s *Store) insertExpense(ctx context.Context, tx *sql.Tx, e Expense) (int64, error) {
 	if e.TotalCents <= 0 {
 		return 0, fmt.Errorf("total must be positive, got %d cents", e.TotalCents)
 	}
@@ -90,44 +100,40 @@ func (s *Store) AddExpense(ctx context.Context, e Expense) (int64, error) {
 		return 0, fmt.Errorf("a new expense is pending or confirmed, not %s", e.Status)
 	}
 
-	var id int64
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		if _, err := user(ctx, tx, e.UserID); err != nil {
-			return err
-		}
-		category, err := categoryBySlug(ctx, tx, e.UserID, e.Category)
-		if err != nil {
-			return err
-		}
-		if existing, found, err := duplicateOf(ctx, tx, e); err != nil {
-			return err
-		} else if found {
-			return &DuplicateError{Existing: existing}
-		}
+	if _, err := user(ctx, tx, e.UserID); err != nil {
+		return 0, err
+	}
+	category, err := categoryBySlug(ctx, tx, e.UserID, e.Category)
+	if err != nil {
+		return 0, err
+	}
+	if existing, found, err := duplicateOf(ctx, tx, e); err != nil {
+		return 0, err
+	} else if found {
+		return 0, &DuplicateError{Existing: existing}
+	}
 
-		now := s.timestamp()
-		var confirmedAt any
-		if e.Status == Confirmed {
-			confirmedAt = now
-		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO expenses (user_id, status, spent_on, spent_time, merchant,
-			merchant_tax_id, category_id, payment_method, account, card_last4, total_cents, currency, description,
-			nfce_key, source, attachment_id, created_at, updated_at, confirmed_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			e.UserID, e.Status, e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID,
-			category.ID, nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
-			e.Description,
-			nullString(e.NFCeKey), e.Source, nullInt(e.AttachmentID), now, now, confirmedAt)
-		if err != nil {
-			return err
-		}
-		if id, err = res.LastInsertId(); err != nil {
-			return err
-		}
-
-		return insertItems(ctx, tx, id, e.Items)
-	})
-	return id, err
+	now := s.timestamp()
+	var confirmedAt any
+	if e.Status == Confirmed {
+		confirmedAt = now
+	}
+	res, err := tx.ExecContext(ctx, `INSERT INTO expenses (user_id, status, spent_on, spent_time, merchant,
+		merchant_tax_id, category_id, payment_method, account, card_last4, total_cents, currency, description,
+		nfce_key, source, attachment_id, created_at, updated_at, confirmed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.UserID, e.Status, e.SpentOn.Format(dateLayout), nullString(e.SpentTime), e.Merchant, e.MerchantTaxID,
+		category.ID, nullString(e.PaymentMethod), e.Account, nullString(e.CardLast4), e.TotalCents, e.Currency,
+		e.Description,
+		nullString(e.NFCeKey), e.Source, nullInt(e.AttachmentID), now, now, confirmedAt)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, insertItems(ctx, tx, id, e.Items)
 }
 
 func (s *Store) Duplicate(ctx context.Context, e Expense) (Expense, bool, error) {

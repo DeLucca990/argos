@@ -38,6 +38,7 @@ var extensions = map[string]string{
 type extractor interface {
 	Extract(ctx context.Context, in extract.Input) (extract.Result, error)
 	Correct(ctx context.Context, c extract.Correction) (extract.Result, error)
+	Classify(ctx context.Context, s extract.Statement) ([]extract.Filed, extract.Result, error)
 }
 
 type incoming struct {
@@ -186,6 +187,11 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 	record.ExpenseID = id
 	b.record(ctx, record)
 	log.Printf("user %d: expense %d saved", user.ID, id)
+	if absorbed, found, err := b.store.AbsorbBankExpense(ctx, user.ID, id); err != nil {
+		log.Printf("user %d: looking for expense %d in the bank's: %v", user.ID, id, err)
+	} else if found {
+		log.Printf("user %d: expense %d replaces expense %d, imported from the bank", user.ID, id, absorbed.ID)
+	}
 	e, err := b.store.Expense(ctx, id)
 	if err != nil {
 		log.Printf("expense %d: reading it back: %v", id, err)

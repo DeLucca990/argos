@@ -10,6 +10,7 @@ type command struct {
 	name        string
 	description string
 	usage       string
+	bank        bool
 }
 
 var commands = []command{
@@ -21,8 +22,20 @@ var commands = []command{
 	{name: "exportar", description: "O mês numa planilha CSV", usage: "[2026-10 | tudo]"},
 	{name: "resumo", description: "O resumo de um mês, comparado ao anterior", usage: "[mês]"},
 	{name: "categorias", description: "As categorias, e as suas para criar e editar"},
+	{name: "bancos", description: "Os bancos conectados pelo Open Finance", bank: true},
+	{name: "conectar", description: "Conecta um banco pelo Open Finance", usage: "[id do item]", bank: true},
 	{name: "cost", description: "Quanto as leituras custaram"},
 	{name: "help", description: "O que este bot sabe fazer"},
+}
+
+func commandsFor(banking bool) []command {
+	var list []command
+	for _, c := range commands {
+		if !c.bank || banking {
+			list = append(list, c)
+		}
+	}
+	return list
 }
 
 func (c command) menuDescription() string {
@@ -45,22 +58,26 @@ func parseCommand(text string) (name, target, rest string) {
 	return strings.ToLower(name), target, rest
 }
 
-func helpText() string {
-	var b strings.Builder
-	b.WriteString("<b>Argos</b>\n\n")
-	b.WriteString("Mande um comprovante e eu registro o gasto:\n" +
+func (b *Bot) helpText(telegramID int64) string {
+	banking := b.bankFor(telegramID) != nil
+	var s strings.Builder
+	s.WriteString("<b>Argos</b>\n\n")
+	s.WriteString("Mande um comprovante e eu registro o gasto:\n" +
 		"• a foto de um cupom, nota ou comprovante\n" +
 		"• um PDF, como a nota fiscal ou o comprovante do banco\n" +
 		"• ou uma linha de texto: <i>almoço 35,90 no pix</i>\n\n" +
 		"Eu salvo na hora e mostro o que li. Para corrigir, responda ao cartão: <i>foi 45,90 no crédito</i>.\n\n" +
 		"E pergunte o que quiser sobre os gastos: <i>quanto gastei com mercado em setembro?</i>, " +
 		"<i>qual foi meu maior gasto da semana?</i>\n\n")
-	for _, c := range commands {
+	if banking {
+		s.WriteString("Ou conecte seus bancos com /conectar, e os gastos chegam sozinhos pelo Open Finance.\n\n")
+	}
+	for _, c := range commandsFor(banking) {
 		line := "/" + c.name
 		if c.usage != "" {
 			line += " " + c.usage
 		}
-		b.WriteString(html.EscapeString(line) + " — " + html.EscapeString(c.description) + "\n")
+		s.WriteString(html.EscapeString(line) + " — " + html.EscapeString(c.description) + "\n")
 	}
-	return b.String()
+	return s.String()
 }

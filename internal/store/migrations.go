@@ -217,4 +217,114 @@ CREATE TABLE lessons (
 
 CREATE INDEX lessons_by_user ON lessons (user_id, id);
 `},
+	{name: "0008_bank", rebuild: true, sql: `
+CREATE TABLE new_expenses (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL REFERENCES users (id),
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'confirmed', 'discarded')),
+    spent_on        TEXT NOT NULL CHECK (spent_on GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+    spent_time      TEXT CHECK (spent_time GLOB '[0-2][0-9]:[0-5][0-9]'),
+    merchant        TEXT NOT NULL DEFAULT '',
+    merchant_tax_id TEXT NOT NULL DEFAULT '',
+    category_id     INTEGER NOT NULL REFERENCES categories (id),
+    payment_method  TEXT CHECK (payment_method IN ('pix', 'credito', 'debito', 'dinheiro', 'boleto', 'vale', 'outro')),
+    account         TEXT NOT NULL DEFAULT '',
+    card_last4      TEXT CHECK (card_last4 GLOB '[0-9][0-9][0-9][0-9]'),
+    total_cents     INTEGER NOT NULL CHECK (total_cents > 0),
+    currency        TEXT NOT NULL DEFAULT 'BRL',
+    description     TEXT NOT NULL DEFAULT '',
+    nfce_key        TEXT CHECK (length(nfce_key) = 44),
+    source          TEXT NOT NULL CHECK (source IN ('photo', 'pdf', 'text', 'bank')),
+    attachment_id   INTEGER REFERENCES attachments (id),
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    confirmed_at    TEXT
+);
+
+INSERT INTO new_expenses (id, user_id, status, spent_on, spent_time, merchant, merchant_tax_id, category_id,
+    payment_method, account, card_last4, total_cents, currency, description, nfce_key, source, attachment_id,
+    created_at, updated_at, confirmed_at)
+    SELECT id, user_id, status, spent_on, spent_time, merchant, merchant_tax_id, category_id,
+        payment_method, account, card_last4, total_cents, currency, description, nfce_key, source, attachment_id,
+        created_at, updated_at, confirmed_at
+    FROM expenses ORDER BY id;
+
+DELETE FROM sqlite_sequence WHERE name = 'new_expenses';
+INSERT INTO sqlite_sequence (name, seq) SELECT 'new_expenses', seq FROM sqlite_sequence WHERE name = 'expenses';
+
+DROP TABLE expenses;
+ALTER TABLE new_expenses RENAME TO expenses;
+
+CREATE INDEX expenses_by_user_and_day ON expenses (user_id, status, spent_on);
+
+CREATE UNIQUE INDEX expenses_one_per_attachment ON expenses (attachment_id)
+    WHERE attachment_id IS NOT NULL AND status != 'discarded';
+
+CREATE UNIQUE INDEX expenses_one_per_nfce_key ON expenses (nfce_key)
+    WHERE nfce_key IS NOT NULL AND status != 'discarded';
+
+CREATE TABLE new_extractions (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id            INTEGER NOT NULL REFERENCES users (id),
+    attachment_id      INTEGER REFERENCES attachments (id),
+    expense_id         INTEGER REFERENCES expenses (id) ON DELETE SET NULL,
+    model              TEXT NOT NULL,
+    raw_json           TEXT NOT NULL DEFAULT '',
+    failed             INTEGER NOT NULL DEFAULT 0,
+    input_tokens       INTEGER NOT NULL DEFAULT 0,
+    output_tokens      INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    usd                REAL NOT NULL DEFAULT 0,
+    created_at         TEXT NOT NULL,
+    kind               TEXT NOT NULL DEFAULT 'receipt'
+                       CHECK (kind IN ('receipt', 'correction', 'question', 'bank'))
+);
+
+INSERT INTO new_extractions (id, user_id, attachment_id, expense_id, model, raw_json, failed, input_tokens,
+    output_tokens, cache_read_tokens, cache_write_tokens, usd, created_at, kind)
+    SELECT id, user_id, attachment_id, expense_id, model, raw_json, failed, input_tokens,
+        output_tokens, cache_read_tokens, cache_write_tokens, usd, created_at, kind
+    FROM extractions ORDER BY id;
+
+DELETE FROM sqlite_sequence WHERE name = 'new_extractions';
+INSERT INTO sqlite_sequence (name, seq) SELECT 'new_extractions', seq FROM sqlite_sequence WHERE name = 'extractions';
+
+DROP TABLE extractions;
+ALTER TABLE new_extractions RENAME TO extractions;
+
+CREATE INDEX extractions_by_time ON extractions (created_at);
+
+CREATE TABLE bank_items (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    pluggy_id     TEXT NOT NULL UNIQUE,
+    user_id       INTEGER NOT NULL REFERENCES users (id),
+    name          TEXT NOT NULL DEFAULT '',
+    status        TEXT NOT NULL DEFAULT '',
+    error         TEXT NOT NULL DEFAULT '',
+    import_from   TEXT NOT NULL CHECK (import_from GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+    imported_upto TEXT,
+    synced_at     TEXT,
+    consent_until TEXT,
+    created_at    TEXT NOT NULL
+);
+
+CREATE TABLE bank_transactions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pluggy_id   TEXT NOT NULL UNIQUE,
+    user_id     INTEGER NOT NULL REFERENCES users (id),
+    account_id  TEXT NOT NULL,
+    provider_id TEXT NOT NULL DEFAULT '',
+    spent_on    TEXT NOT NULL CHECK (spent_on GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+    total_cents INTEGER NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    expense_id  INTEGER REFERENCES expenses (id),
+    created_at  TEXT NOT NULL
+);
+
+CREATE INDEX bank_transactions_by_expense ON bank_transactions (expense_id);
+CREATE INDEX bank_transactions_by_account ON bank_transactions (account_id, spent_on);
+CREATE INDEX bank_transactions_by_description ON bank_transactions (user_id, description, id);
+`},
 }

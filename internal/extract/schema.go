@@ -14,24 +14,25 @@ type Category struct {
 	Hint  string
 }
 
-func schema(categories []Category) (json.RawMessage, error) {
-	str := func(description string) map[string]any {
-		return map[string]any{"type": "string", "description": description}
-	}
-	object := func(properties map[string]any) map[string]any {
-		required := make([]string, 0, len(properties))
-		for name := range properties {
-			required = append(required, name)
-		}
-		slices.Sort(required)
-		return map[string]any{
-			"type":                 "object",
-			"properties":           properties,
-			"required":             required,
-			"additionalProperties": false,
-		}
-	}
+func str(description string) map[string]any {
+	return map[string]any{"type": "string", "description": description}
+}
 
+func object(properties map[string]any) map[string]any {
+	required := make([]string, 0, len(properties))
+	for name := range properties {
+		required = append(required, name)
+	}
+	slices.Sort(required)
+	return map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"required":             required,
+		"additionalProperties": false,
+	}
+}
+
+func categoryProperty(categories []Category) map[string]any {
 	slugs := make([]string, 0, len(categories))
 	labels := make([]string, 0, len(categories))
 	for _, c := range categories {
@@ -42,7 +43,14 @@ func schema(categories []Category) (json.RawMessage, error) {
 		}
 		labels = append(labels, label)
 	}
+	return map[string]any{
+		"type":        "string",
+		"enum":        slugs,
+		"description": "the best fit among: " + strings.Join(labels, "; "),
+	}
+}
 
+func schema(categories []Category) (json.RawMessage, error) {
 	item := object(map[string]any{
 		"description": str("the line as printed, expanded where an abbreviation is obvious"),
 		"quantity":    str(`decimal with a dot, e.g. "2" or "0.385"; "1" when not printed`),
@@ -67,12 +75,8 @@ func schema(categories []Category) (json.RawMessage, error) {
 		"payment_account": str("the bank, card issuer, wallet or benefits card the money came from, by its everyday name — " +
 			"Nubank (not Nu Pagamentos), Inter, Itaú, Bradesco, Santander, Caixa, C6, PicPay, Mercado Pago, Caju, Flash, VR, Alelo; " +
 			"empty when the receipt does not show it"),
-		"card_last4": str("the last four digits of the card used, when printed (•••• 1234, final 1234); empty otherwise"),
-		"category": map[string]any{
-			"type":        "string",
-			"enum":        slugs,
-			"description": "the best fit among: " + strings.Join(labels, "; "),
-		},
+		"card_last4":      str("the last four digits of the card used, when printed (•••• 1234, final 1234); empty otherwise"),
+		"category":        categoryProperty(categories),
 		"description":     str("two to five words in Brazilian Portuguese saying what was bought, e.g. \"Almoço\" or \"Compras do mês\""),
 		"nfce_access_key": str("the 44-character chave de acesso of an NF-e or NFC-e, without spaces; empty when not printed"),
 		"items":           map[string]any{"type": "array", "items": item, "description": "the line items when the document lists them; empty otherwise"},

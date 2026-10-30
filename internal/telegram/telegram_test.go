@@ -39,7 +39,8 @@ func TestRememberSavesTheSender(t *testing.T) {
 
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
-	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, ModelEnv, EffortEnv, anthropicKeyEnv, anthropicTokenEnv} {
+	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, ModelEnv, EffortEnv, anthropicKeyEnv, anthropicTokenEnv,
+		PluggyIDEnv, PluggySecretEnv} {
 		t.Setenv(k, kv[k])
 	}
 }
@@ -105,6 +106,55 @@ func TestConfigDeleteReceipts(t *testing.T) {
 	t.Setenv(DeleteFilesEnv, "talvez")
 	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), DeleteFilesEnv) {
 		t.Errorf("talvez: %v", err)
+	}
+}
+
+func TestConfigPluggy(t *testing.T) {
+	base := map[string]string{TokenEnv: "123:abc", AllowedUsersEnv: "42", DataDirEnv: t.TempDir(), anthropicKeyEnv: "x"}
+	setEnv(t, base)
+	if cfg, err := LoadConfig(); err != nil || cfg.Pluggy.ID != "" || len(cfg.PluggyUsers) != 0 {
+		t.Errorf("without Pluggy: %+v, %v", cfg, err)
+	}
+	base[PluggyIDEnv], base[PluggySecretEnv] = "id", "secret"
+	setEnv(t, base)
+	if cfg, err := LoadConfig(); err != nil || cfg.Pluggy != (PluggyCredentials{"id", "secret"}) {
+		t.Errorf("with Pluggy: %+v, %v", cfg, err)
+	}
+	base[PluggySecretEnv] = ""
+	setEnv(t, base)
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), PluggySecretEnv) {
+		t.Errorf("an id without a secret: %v", err)
+	}
+}
+
+func TestConfigPluggyPerPerson(t *testing.T) {
+	setEnv(t, map[string]string{TokenEnv: "123:abc", AllowedUsersEnv: "42, 7", DataDirEnv: t.TempDir(), anthropicKeyEnv: "x"})
+	t.Setenv(PluggyIDEnv+"_7", "bia-id")
+	t.Setenv(PluggySecretEnv+"_7", "bia-secret")
+	t.Setenv(PluggyIDEnv+"_99", "")
+	t.Setenv(PluggySecretEnv+"_99", "")
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.PluggyUsers) != 1 || cfg.PluggyUsers[7] != (PluggyCredentials{"bia-id", "bia-secret"}) || cfg.Pluggy.ID != "" {
+		t.Errorf("per person: %+v, default %+v", cfg.PluggyUsers, cfg.Pluggy)
+	}
+
+	t.Setenv(PluggyIDEnv+"_bia", "x")
+	t.Setenv(PluggySecretEnv+"_bia", "y")
+	t.Setenv(PluggyIDEnv+"_99", "z")
+	t.Setenv(PluggySecretEnv+"_99", "w")
+	t.Setenv(PluggySecretEnv+"_42", "only the secret")
+	_, err = LoadConfig()
+	for _, want := range []string{
+		"PLUGGY_CLIENT_ID_bia, PLUGGY_CLIENT_SECRET_bia: what follows PLUGGY_CLIENT_ID_ is the numeric Telegram id",
+		"PLUGGY_CLIENT_ID_99: 99 is not in " + AllowedUsersEnv,
+		"PLUGGY_CLIENT_ID_42 and PLUGGY_CLIENT_SECRET_42 go together",
+	} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("the error lacks %q:\n%v", want, err)
+		}
 	}
 }
 

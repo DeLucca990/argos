@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"slices"
@@ -20,6 +21,8 @@ const (
 	BackupKeepEnv   = "ARGOS_BACKUP_KEEP"
 	DigestAtEnv     = "ARGOS_DIGEST_AT"
 	DeleteFilesEnv  = "ARGOS_DELETE_RECEIPTS"
+	PluggyIDEnv     = "PLUGGY_CLIENT_ID"
+	PluggySecretEnv = "PLUGGY_CLIENT_SECRET"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
@@ -45,7 +48,11 @@ type Config struct {
 	BackupKeep   int
 	DigestAt     *DailyAt
 	DeleteFiles  bool
+	Pluggy       PluggyCredentials
+	PluggyUsers  map[int64]PluggyCredentials
 }
+
+type PluggyCredentials struct{ ID, Secret string }
 
 type DailyAt struct{ Hour, Minute int }
 
@@ -58,6 +65,8 @@ func LoadConfig() (Config, error) {
 		Token:  env(TokenEnv),
 		Model:  envOr(ModelEnv, defaultModel),
 		Effort: strings.ToLower(envOr(EffortEnv, defaultEffort)),
+
+		Pluggy: PluggyCredentials{ID: env(PluggyIDEnv), Secret: env(PluggySecretEnv)},
 	}
 
 	if env(anthropicKeyEnv) == "" && env(anthropicTokenEnv) == "" {
@@ -115,6 +124,14 @@ func LoadConfig() (Config, error) {
 		cfg.DeleteFiles = v
 	}
 
+	if (cfg.Pluggy.ID == "") != (cfg.Pluggy.Secret == "") {
+		problems = append(problems, fmt.Sprintf("%s and %s go together: both, from the Pluggy dashboard, "+
+			"to import expenses from banks; neither to send receipts only", PluggyIDEnv, PluggySecretEnv))
+	}
+	var pluggyProblems []string
+	cfg.PluggyUsers, pluggyProblems = pluggyUsers(os.Environ(), users)
+	problems = append(problems, pluggyProblems...)
+
 	if raw := strings.ToLower(envOr(DigestAtEnv, defaultDigest)); raw != "off" {
 		t, err := time.Parse("15:04", raw)
 		if err != nil {
@@ -168,6 +185,41 @@ func parseUserIDs(raw string) (map[int64]bool, error) {
 		ids[id] = true
 	}
 	return ids, nil
+}
+
+func pluggyUsers(environ []string, allowed map[int64]bool) (map[int64]PluggyCredentials, []string) {
+	suffixes := map[string]bool{}
+	for _, kv := range environ {
+		key, _, _ := strings.Cut(kv, "=")
+		for _, prefix := range []string{PluggyIDEnv + "_", PluggySecretEnv + "_"} {
+			if suffix, ok := strings.CutPrefix(key, prefix); ok {
+				suffixes[suffix] = true
+			}
+		}
+	}
+
+	own := map[int64]PluggyCredentials{}
+	var problems []string
+	for _, suffix := range slices.Sorted(maps.Keys(suffixes)) {
+		idKey, secretKey := PluggyIDEnv+"_"+suffix, PluggySecretEnv+"_"+suffix
+		creds := PluggyCredentials{ID: env(idKey), Secret: env(secretKey)}
+		if creds.ID == "" && creds.Secret == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(suffix, 10, 64)
+		switch {
+		case err != nil || id <= 0:
+			problems = append(problems, fmt.Sprintf("%s, %s: what follows %s_ is the numeric Telegram id of "+
+				"the person whose Pluggy application it is", idKey, secretKey, PluggyIDEnv))
+		case creds.ID == "" || creds.Secret == "":
+			problems = append(problems, fmt.Sprintf("%s and %s go together", idKey, secretKey))
+		case len(allowed) > 0 && !allowed[id]:
+			problems = append(problems, fmt.Sprintf("%s: %d is not in %s", idKey, id, AllowedUsersEnv))
+		default:
+			own[id] = creds
+		}
+	}
+	return own, problems
 }
 
 func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }

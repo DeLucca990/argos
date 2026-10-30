@@ -31,6 +31,25 @@ type fakeExtractor struct {
 	last        extract.Input
 	fixed       extract.Result
 	corrections []extract.Correction
+	statements  []extract.Statement
+	file        func(extract.BankLine) extract.Filed
+	fileErr     error
+}
+
+func (f *fakeExtractor) Classify(_ context.Context, s extract.Statement) ([]extract.Filed, extract.Result, error) {
+	f.statements = append(f.statements, s)
+	res := extract.Result{Model: "claude-opus-5-5", RawJSON: "{}", Spend: cost.Spend{USD: 0.01}}
+	if f.fileErr != nil {
+		return nil, res, f.fileErr
+	}
+	filed := make([]extract.Filed, len(s.Lines))
+	for i, l := range s.Lines {
+		filed[i] = extract.Filed{Spending: true, Merchant: nonEmpty(l.PaidTo, l.Description), Description: "Compra", Category: "outros"}
+		if f.file != nil {
+			filed[i] = f.file(l)
+		}
+	}
+	return filed, res, nil
 }
 
 func (f *fakeExtractor) Correct(_ context.Context, c extract.Correction) (extract.Result, error) {
@@ -70,7 +89,8 @@ func testBot(t *testing.T, fx *fakeExtractor) (*Bot, store.User) {
 	}
 	t.Cleanup(func() { st.Close() })
 
-	b := &Bot{cfg: Config{DataDir: dir, Model: "claude-opus-5-5"}, store: st, extractor: fx, now: func() time.Time { return fixed }}
+	b := &Bot{cfg: Config{DataDir: dir, Model: "claude-opus-5-5"}, store: st, extractor: fx, now: func() time.Time { return fixed },
+		slots: make(chan struct{}, maxConcurrency)}
 	os.MkdirAll(filepath.Join(dir, receiptsDir), 0o750)
 	user, err := st.SaveUser(ctx, store.User{TelegramID: 8683784233, FirstName: "Ana"})
 	if err != nil {
