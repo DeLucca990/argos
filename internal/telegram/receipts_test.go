@@ -107,7 +107,7 @@ func TestReadRecordsAPendingExpense(t *testing.T) {
 
 	for _, want := range []string{"Drogaria Boa Saúde", "CNPJ 11.222.333/0001-81", "19/10/2026 às 10:15", "Débito",
 		"💊 Farmácia", "R$ 42,30", "Dipirona 500mg — 2 × R$ 9,90 = R$ 19,80", "⚠️ A soma dos itens (R$ 19,80)",
-		"📝 o último dígito", "✅ <b>Salvo.</b>", "US$ 0,0400 · claude-opus-5-5"} {
+		"📝 o último dígito", "✅ <b>Salvo.</b>", "<i>leitura (claude-opus-5-5): ≈ US$ 0,0400 · 6.000 tokens: 5.000 entrada, 1.000 saída</i>"} {
 		if !strings.Contains(r.text, want) {
 			t.Errorf("the card lacks %q:\n%s", want, r.text)
 		}

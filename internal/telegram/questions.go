@@ -84,7 +84,7 @@ func (b *Bot) question(ctx context.Context, user store.User, text string) reply 
 	if len(answer) > maxAnswerRunes {
 		answer = append(answer[:maxAnswerRunes], []rune("…")...)
 	}
-	out := escape(string(answer)) + "\n\n<i>≈ US$ " + dollars(ans.Spend.USD, 4) + "</i>"
+	out := escape(string(answer)) + "\n\n" + usageLine(ans.Spend, "")
 	if ans.Reset {
 		out = "<i>(a conversa ficou longa: recomecei do zero)</i>\n\n" + out
 	}

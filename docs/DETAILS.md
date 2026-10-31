@@ -212,7 +212,7 @@ CNPJ 11.222.333/0001-81
 ⚠️ A soma dos itens (R$ 19,80) é diferente do total (R$ 42,30): pode ser desconto, …
 
 ✅ Salvo.
-leitura: ≈ US$ 0,0400 · claude-opus-5-5
+leitura (claude-opus-5-5): ≈ US$ 0,0400 · 6.000 tokens: 5.000 entrada, 1.000 saída
 [ 🏷️ Categoria ] [ ❌ Descartar ]
 ```
 
@@ -538,7 +538,7 @@ Em setembro você gastou R$ 388,00, em 3 gastos:
 • Mercado: R$ 370,00 (95%)
 • Restaurante: R$ 18,00 (5%)
 
-≈ US$ 0,0300
+≈ US$ 0,0300 · 6.520 tokens: 4.200 entrada, 2.100 cache lido, 220 saída
 ```
 
 **What counts as a question.** A message with a `?`; one that starts with a question word or a

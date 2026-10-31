@@ -94,11 +94,12 @@ func TestCardsAndCost(t *testing.T) {
 		t.Errorf("card: %d, %v", got, err)
 	}
 
-	s.RecordExtraction(ctx, Extraction{UserID: me, ExpenseID: id, Model: "m", USD: 0.04})
-	s.RecordExtraction(ctx, Extraction{UserID: me, ExpenseID: id, Model: "m", USD: 0.01})
-	s.RecordExtraction(ctx, Extraction{UserID: me, Model: "m", USD: 1})
-	if usd, err := s.ExpenseCost(ctx, id); err != nil || usd < 0.0499 || usd > 0.0501 {
-		t.Errorf("cost: %f, %v", usd, err)
+	s.RecordExtraction(ctx, Extraction{UserID: me, ExpenseID: id, Model: "m", InputTokens: 1000, OutputTokens: 200, USD: 0.04})
+	s.RecordExtraction(ctx, Extraction{UserID: me, ExpenseID: id, Model: "m", InputTokens: 300, CacheReadTokens: 50, USD: 0.01})
+	s.RecordExtraction(ctx, Extraction{UserID: me, Model: "m", InputTokens: 9999, USD: 1})
+	sp, err := s.ExpenseCost(ctx, id)
+	if err != nil || sp.USD < 0.0499 || sp.USD > 0.0501 || sp.Input != 1300 || sp.Output != 200 || sp.CacheRead != 50 {
+		t.Errorf("cost: %+v, %v", sp, err)
 	}
 }
 

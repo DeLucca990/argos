@@ -57,7 +57,7 @@ func TestQuestion(t *testing.T) {
 	b.asker = fa
 
 	r := b.question(ctx, user, "quanto gastei em setembro?")
-	if r.text != "Em setembro: R$ 388,00 &lt;no mercado&gt;\n\n<i>≈ US$ 0,0200</i>" || r.keyboard != nil || r.expenseID != 0 {
+	if r.text != "Em setembro: R$ 388,00 &lt;no mercado&gt;\n\n<i>≈ US$ 0,0200 · 4.680 tokens: 4.500 entrada, 180 saída</i>" || r.keyboard != nil || r.expenseID != 0 {
 		t.Errorf("reply: %q", r.text)
 	}
 	calls, _ := b.store.Calls(ctx, time.Unix(0, 0))

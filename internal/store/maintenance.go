@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/DeLucca990/argos-bot/internal/cost"
 )
 
 const backupLayout = "2006-01-02-150405"
@@ -29,10 +31,12 @@ func (s *Store) CardExpense(ctx context.Context, chatID int64, messageID int) (i
 	return id, err
 }
 
-func (s *Store) ExpenseCost(ctx context.Context, expenseID int64) (float64, error) {
-	var usd float64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(usd), 0) FROM extractions WHERE expense_id = ?`, expenseID).Scan(&usd)
-	return usd, err
+func (s *Store) ExpenseCost(ctx context.Context, expenseID int64) (cost.Spend, error) {
+	var sp cost.Spend
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0),
+		COALESCE(SUM(cache_read_tokens), 0), COALESCE(SUM(cache_write_tokens), 0), COALESCE(SUM(usd), 0)
+		FROM extractions WHERE expense_id = ?`, expenseID).Scan(&sp.Input, &sp.Output, &sp.CacheRead, &sp.CacheWrite, &sp.USD)
+	return sp, err
 }
 
 func (s *Store) Backup(ctx context.Context, file string) error {

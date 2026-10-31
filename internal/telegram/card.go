@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-telegram/bot/models"
 
+	"github.com/DeLucca990/argos-bot/internal/cost"
 	"github.com/DeLucca990/argos-bot/internal/receipt"
 	"github.com/DeLucca990/argos-bot/internal/store"
 )
@@ -40,7 +41,7 @@ type details struct {
 	notes      string
 	remembered []string
 	statement  string
-	usd        float64
+	spend      cost.Spend
 	model      string
 }
 
@@ -70,9 +71,11 @@ func (b *Bot) details(ctx context.Context, e store.Expense) details {
 		}
 		return d
 	}
-	d.usd, d.model = x.USD, x.Model
+	d.model = x.Model
+	d.spend = cost.Spend{Input: x.InputTokens, Output: x.OutputTokens, CacheRead: x.CacheReadTokens,
+		CacheWrite: x.CacheWriteTokens, USD: x.USD}
 	if total, err := b.store.ExpenseCost(ctx, e.ID); err == nil {
-		d.usd = total
+		d.spend = total
 	}
 	var raw receipt.Raw
 	if json.Unmarshal([]byte(x.RawJSON), &raw) == nil {
@@ -157,8 +160,7 @@ func cardText(e store.Expense, d details, cats catalog) string {
 		s.WriteString("❌ <b>Descartado.</b>")
 	}
 	if d.model != "" {
-		usd := dollars(d.usd, 4)
-		s.WriteString("\n<i>leitura: ≈ US$ " + usd + " · " + html.EscapeString(d.model) + "</i>")
+		s.WriteString("\n" + usageLine(d.spend, "leitura ("+d.model+")"))
 	}
 	return s.String()
 }
