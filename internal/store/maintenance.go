@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DeLucca990/argos-bot/internal/cost"
+	"github.com/DeLucca990/argos/internal/cost"
 )
 
 const backupLayout = "2006-01-02-150405"

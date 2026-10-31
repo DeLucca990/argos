@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeLucca990/argos-bot/internal/extract"
-	"github.com/DeLucca990/argos-bot/internal/pluggy"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/extract"
+	"github.com/DeLucca990/argos/internal/pluggy"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 const testItem = "6f1b8a3e-2c4d-4e5f-8a9b-0c1d2e3f4a5b"

@@ -15,7 +15,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 var (

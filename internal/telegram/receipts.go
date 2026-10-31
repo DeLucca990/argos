@@ -19,9 +19,9 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"github.com/DeLucca990/argos-bot/internal/extract"
-	"github.com/DeLucca990/argos-bot/internal/receipt"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/extract"
+	"github.com/DeLucca990/argos/internal/receipt"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 const (

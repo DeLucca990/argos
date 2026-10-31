@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/DeLucca990/argos-bot/internal/cost"
+	"github.com/DeLucca990/argos/internal/cost"
 )
 
 func usageLine(s cost.Spend, label string) string {

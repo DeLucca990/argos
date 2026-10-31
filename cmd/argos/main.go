@@ -12,9 +12,9 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"github.com/DeLucca990/argos-bot/internal/dotenv"
-	"github.com/DeLucca990/argos-bot/internal/store"
-	"github.com/DeLucca990/argos-bot/internal/telegram"
+	"github.com/DeLucca990/argos/internal/dotenv"
+	"github.com/DeLucca990/argos/internal/store"
+	"github.com/DeLucca990/argos/internal/telegram"
 )
 
 func main() {

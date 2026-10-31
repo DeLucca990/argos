@@ -15,10 +15,10 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/DeLucca990/argos-bot/internal/dotenv"
-	"github.com/DeLucca990/argos-bot/internal/extract"
-	"github.com/DeLucca990/argos-bot/internal/receipt"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/dotenv"
+	"github.com/DeLucca990/argos/internal/extract"
+	"github.com/DeLucca990/argos/internal/receipt"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 var types = map[string]string{

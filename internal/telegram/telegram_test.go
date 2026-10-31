@@ -11,7 +11,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 func TestRememberSavesTheSender(t *testing.T) {

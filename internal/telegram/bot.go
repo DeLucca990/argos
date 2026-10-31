@@ -14,10 +14,10 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
-	"github.com/DeLucca990/argos-bot/internal/ask"
-	"github.com/DeLucca990/argos-bot/internal/extract"
-	"github.com/DeLucca990/argos-bot/internal/pluggy"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/ask"
+	"github.com/DeLucca990/argos/internal/extract"
+	"github.com/DeLucca990/argos/internal/pluggy"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 type Bot struct {

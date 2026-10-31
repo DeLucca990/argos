@@ -3,7 +3,7 @@ package telegram
 import (
 	"testing"
 
-	"github.com/DeLucca990/argos-bot/internal/cost"
+	"github.com/DeLucca990/argos/internal/cost"
 )
 
 func TestUsageLine(t *testing.T) {

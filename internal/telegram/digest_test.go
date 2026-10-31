@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-telegram/bot"
 
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 func at(s string) time.Time {

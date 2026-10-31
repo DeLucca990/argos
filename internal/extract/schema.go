@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/DeLucca990/argos-bot/internal/receipt"
+	"github.com/DeLucca990/argos/internal/receipt"
 )
 
 type Category struct {

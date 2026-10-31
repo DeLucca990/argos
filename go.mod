@@ -1,4 +1,4 @@
-module github.com/DeLucca990/argos-bot
+module github.com/DeLucca990/argos
 
 go 1.26.4
 

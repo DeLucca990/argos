@@ -11,9 +11,9 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	"github.com/DeLucca990/argos-bot/internal/cost"
-	"github.com/DeLucca990/argos-bot/internal/extract"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/cost"
+	"github.com/DeLucca990/argos/internal/extract"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 const (

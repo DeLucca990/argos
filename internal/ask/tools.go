@@ -9,8 +9,8 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 
-	"github.com/DeLucca990/argos-bot/internal/receipt"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/receipt"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 const (

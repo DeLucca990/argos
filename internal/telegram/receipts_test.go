@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeLucca990/argos-bot/internal/cost"
-	"github.com/DeLucca990/argos-bot/internal/extract"
-	"github.com/DeLucca990/argos-bot/internal/receipt"
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/cost"
+	"github.com/DeLucca990/argos/internal/extract"
+	"github.com/DeLucca990/argos/internal/receipt"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 var (

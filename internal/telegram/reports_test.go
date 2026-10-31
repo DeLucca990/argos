@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeLucca990/argos-bot/internal/store"
+	"github.com/DeLucca990/argos/internal/store"
 )
 
 func seed(t *testing.T, b *Bot, user store.User) {
