@@ -8,6 +8,165 @@ the answers).
 
 Pluggy's own reference: [docs.pluggy.ai/en/reference](https://docs.pluggy.ai/en/reference).
 
+## Architecture
+
+All of it runs inside the bot's one process, and nothing in it listens: the bot asks Pluggy, on a
+timer or when someone asks it to, and Pluggy never calls the bot.
+
+```mermaid
+flowchart LR
+    person(["Person, in Telegram"])
+    banks[("Their banks")]
+    claude["Claude<br/>Anthropic API"]
+
+    subgraph pluggy["Pluggy"]
+        meu["Meu Pluggy<br/>meu.pluggy.ai"]
+        api["api.pluggy.ai"]
+    end
+
+    subgraph argos["Argos, one process"]
+        subgraph tg["internal/telegram"]
+            cmds["/conectar, /bancos, 🔄 and 🔌<br/>bank.go"]
+            loop["the loop<br/>every PLUGGY_SYNC_EVERY"]
+            check["one check of one connection<br/>syncItem: reconcile, file"]
+            pick["bankFor<br/>whose application"]
+            receipts["a receipt read<br/>receipts.go"]
+        end
+        client["internal/pluggy<br/>a client per application"]
+        filing["internal/extract<br/>Classify"]
+        st["internal/store<br/>bank.go"]
+        db[("SQLite")]
+    end
+
+    banks -- "Open Finance consent" --> meu
+    meu -- "an item per bank" --> api
+    person -- "commands and buttons" --> cmds
+    cmds --> check
+    loop --> check
+    check --> pick
+    pick --> client
+    client -- "HTTPS, X-API-KEY" --> api
+    check --> filing
+    filing -- "up to 40 a call" --> claude
+    check --> st
+    receipts -- "AbsorbBankExpense" --> st
+    st --> db
+    check -- "summary and cards" --> person
+```
+
+| Where | What it does |
+| --- | --- |
+| `internal/pluggy/pluggy.go` | the HTTP client: signs in, keeps the API key, follows the cursor; knows nothing of the bot |
+| `internal/telegram/bank.go` | `/conectar`, `/bancos` and its buttons; the loop; picking each person's client; turning transactions into expenses; the messages |
+| `internal/telegram/receipts.go` | after a receipt is saved, has the store take over an imported expense of the same purchase |
+| `internal/extract/statement.go` | the integration's one call to Claude: files up to 40 transactions |
+| `internal/store/bank.go` | the two tables, and the queries that recognise a transaction, or a purchase, already recorded |
+| `internal/telegram/config.go` | the credentials, by person, and `PLUGGY_SYNC_EVERY` |
+
+### Whose application
+
+At startup the bot makes a `pluggy.Client` for each application in `.env`: the pair without a
+Telegram id, and one per `PLUGGY_CLIENT_ID_<id>`. `bankFor` picks, by Telegram id, the person's own,
+else the shared one, else none — and then `/bancos` and `/conectar` tell them which two lines to
+add. Everything done for a connection goes through its owner's client, and each client keeps its
+own API key.
+
+### One check of one connection
+
+The loop starts one, every `PLUGGY_SYNC_EVERY`, for each connection of someone in the allowlist who
+has an application; `/conectar` and 🔄 start one at once, forced past the "nothing changed" stop.
+Checks run one at a time, each with five minutes; the call to Claude waits for one of the two
+slots receipts use too.
+
+```mermaid
+flowchart TD
+    begin(["a check"]) --> item["GET /items/{id}"]
+    item -- "404" --> gone["status GONE, told once"]
+    item --> changed{"lastUpdatedAt the same<br/>as imported_upto?"}
+    changed -- "yes, not forced" --> stop(["save the status, stop"])
+    changed -- "no" --> accounts["GET /accounts"]
+    accounts --> txs["GET /v2/transactions, per account<br/>from the 1st, or 30 days back"]
+    txs --> known{"its pluggy_id<br/>recorded?"}
+    known -- "yes" --> skip(["skipped"])
+    known -- "no" --> spending{"DEBIT, not a card bill,<br/>not to the owner's own CPF,<br/>dated today or before?"}
+    spending -- "no" --> dropped(["dropped, not recorded"])
+    spending -- "yes" --> same{"recorded under another id?<br/>its providerId, from any connection,<br/>or same amount within 7 days, vanished"}
+    same -- "yes" --> linked["row, to that expense"]
+    same -- "no" --> receipt{"a receipt of the same amount<br/>within 2 days, not cash?"}
+    receipt -- "yes" --> matched["row, to the receipt's expense"]
+    receipt -- "no" --> before{"same description<br/>filed before?"}
+    before -- "yes" --> verdict{"spending?"}
+    before -- "no" --> model["Claude, 40 a call,<br/>within the daily budget"]
+    model -- "failed or over budget" --> waits(["waits for the next check;<br/>imported_upto stays"])
+    model --> verdict
+    verdict -- "no" --> rowonly["row, no expense"]
+    verdict -- "yes" --> expense["expense, source bank, and its row"]
+    expense --> announce["summary, and cards<br/>of the newest 10"]
+```
+
+Every transaction that reaches a decision gets a row in `bank_transactions` — pointing at its own
+expense, at a receipt's, at the one recorded under its old id, or at nothing when it is not
+spending — and the next read skips it by its id. One dropped by the first test gets no row, and is
+tested again on every read. From the loop, the summary and the cards go out only when there is a
+new expense; `/conectar` and 🔄 always answer.
+
+### A receipt after the bank
+
+```mermaid
+sequenceDiagram
+    participant P as Person
+    participant B as Bot
+    participant S as SQLite
+    P->>B: a receipt
+    B->>S: AddExpense, source photo
+    B->>S: AbsorbBankExpense
+    S-->>B: a bank expense of the same amount, within 2 days
+    Note over S: that expense is discarded, and its<br/>bank_transactions row points at the receipt's
+    B->>P: the receipt's card, with 🏦 No extrato
+```
+
+### The data
+
+```mermaid
+erDiagram
+    users ||--o{ bank_items : connects
+    users ||--o{ bank_transactions : "has"
+    users ||--o{ expenses : "has"
+    expenses |o--o{ bank_transactions : "matched to"
+
+    bank_items {
+        int id PK
+        text pluggy_id UK "the item id"
+        int user_id FK
+        text name
+        text status
+        text error
+        text import_from "the 1st of the month it was connected"
+        text imported_upto "lastUpdatedAt of the last complete import"
+        text synced_at
+        text consent_until
+    }
+    bank_transactions {
+        int id PK
+        text pluggy_id UK
+        int user_id FK
+        text account_id
+        text provider_id "the Open Finance id"
+        text spent_on
+        int total_cents
+        text description "as the bank wrote it"
+        int expense_id FK "none when not spending"
+    }
+    expenses {
+        int id PK
+        text source "bank, among photo, pdf and text"
+    }
+```
+
+`bank_transactions` has no key to `bank_items`: disconnecting deletes the connection and keeps its
+transactions, so connecting it again imports nothing twice. Claude's filing is one row of
+`extractions` per call, of kind `bank` and with no expense: `/cost` counts it, and no card shows it.
+
 ## Requirements
 
 **A Pluggy account and an application, per person.** At

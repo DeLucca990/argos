@@ -70,4 +70,4 @@ their own, its credentials in `.env`; see
 
 - [docs/INSTALL.md](docs/INSTALL.md) — Mac and Windows, `docker run`, image tags, backups
 - [docs/DETAILS.md](docs/DETAILS.md) — every setting and command, the database, running from source
-- [docs/PLUGGY.md](docs/PLUGGY.md) — the Pluggy API as the bot uses it: requirements, endpoints, payloads
+- [docs/PLUGGY.md](docs/PLUGGY.md) — the Pluggy integration: how it is put together, requirements, endpoints, payloads

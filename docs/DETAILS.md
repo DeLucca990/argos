@@ -322,8 +322,8 @@ the original to look at again, or to read anew with a better model.
 
 Receipts are one way in; the other is the bank itself, through Open Finance, by
 [Pluggy](https://pluggy.ai). Both work at once, and a purchase that arrives both ways is kept once.
-The calls to Pluggy themselves — endpoints, payloads, what each field becomes — are in
-[PLUGGY.md](PLUGGY.md).
+How it is put together, with diagrams, and the calls to Pluggy themselves — endpoints, payloads,
+what each field becomes — are in [PLUGGY.md](PLUGGY.md).
 
 ### Setting it up
 
