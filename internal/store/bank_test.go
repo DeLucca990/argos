@@ -42,7 +42,7 @@ func TestBankMigrationKeepsEverything(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	if got := s.Applied(); len(got) != 1 || got[0] != "0008_bank" {
+	if got := s.Applied(); len(got) != len(migrations)-7 || got[0] != "0008_bank" {
 		t.Fatalf("applied %v", got)
 	}
 
@@ -179,6 +179,30 @@ func TestBankTransactions(t *testing.T) {
 	}
 	if _, _, found, err := s.LastFiled(ctx, me, "IFD*IFOOD"); err != nil || found {
 		t.Errorf("a discarded expense still teaches: %v, %v", found, err)
+	}
+}
+
+func TestBankAccounts(t *testing.T) {
+	s := open(t)
+	for _, a := range []BankAccount{
+		{AccountID: "acc", UserID: me, Label: "Itaú"},
+		{AccountID: "acc", UserID: me, CardLast4: "1234"},
+		{AccountID: "acc", UserID: them, Label: "Outro"},
+		{AccountID: "other", UserID: me, Label: "Inter"},
+	} {
+		if err := s.RememberBankAccount(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.BankAccounts(ctx, me)
+	if a := got["acc"]; err != nil || len(got) != 2 || a.Label != "Itaú" || a.CardLast4 != "1234" || got["other"].Label != "Inter" {
+		t.Errorf("remembered: %+v, %v", got, err)
+	}
+	if got, err := s.BankAccounts(ctx, them); err != nil || len(got) != 0 {
+		t.Errorf("someone else's account was taken over: %+v, %v", got, err)
+	}
+	if err := s.RememberBankAccount(ctx, BankAccount{AccountID: "x", UserID: me, CardLast4: "12"}); err == nil {
+		t.Error("a card of two digits was kept")
 	}
 }
 

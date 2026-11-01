@@ -131,6 +131,7 @@ sequenceDiagram
 erDiagram
     users ||--o{ bank_items : connects
     users ||--o{ bank_transactions : "has"
+    users ||--o{ bank_accounts : names
     users ||--o{ expenses : "has"
     expenses |o--o{ bank_transactions : "matched to"
 
@@ -156,6 +157,12 @@ erDiagram
         int total_cents
         text description "as the bank wrote it"
         int expense_id FK "none when not spending"
+    }
+    bank_accounts {
+        text account_id PK "Pluggy's account id"
+        int user_id FK
+        text label "the name given by a correction"
+        text card_last4 "the card given by a correction"
     }
     expenses {
         int id PK
@@ -295,8 +302,8 @@ owner's credentials change to an application that does not have it.
 | `id` | the `accountId` of the transactions call |
 | `type` | `CREDIT` makes every purchase *Crédito*, with the card's digits; `BANK` takes the method from each transaction |
 | `subtype` | `SAVINGS_ACCOUNT` is described to Claude as *poupança*, other bank accounts as *conta corrente* |
-| `marketingName`, else `name` | the account's name, where the connector's says nothing |
-| `number` | a card's last four digits, when the transaction does not name the card |
+| `marketingName`, else `name` | the account's name, where the connector's says nothing — unless the person gave it one, in `bank_accounts` |
+| `number` | a card's last four digits, when the transaction does not name the card; without either, the card the person gave the account |
 | `taxNumber` | the owner's CPF: a Pix to it is a transfer between their own accounts |
 | `currencyCode` | the currency of `amountInAccountCurrency` |
 
@@ -356,7 +363,7 @@ amount that is zero or not a number; a `date` after today — installments still
 | `date` | `spent_on`, and `spent_time` when it has one. Pluggy sends UTC: midnight UTC is read as a bare date; any other instant is converted to local time, and a time is kept unless it is local midnight |
 | `amountInAccountCurrency`, else `amount` | `total_cents`, without its sign — positive for card purchases, negative for account debits |
 | the account's `currencyCode` with `amountInAccountCurrency`, else `currencyCode` | `currency` |
-| `paymentData.paymentMethod`, else `operationType` | on a bank account: `PIX` → *Pix*, `BOLETO` and `CONVENIO_ARRECADACAO` → *Boleto*, `CARTAO` → *Débito*, anything else none |
+| `paymentData.paymentMethod`, else `operationType` | on a bank account: `PIX` → *Pix*, `BOLETO` and `CONVENIO_ARRECADACAO` → *Boleto*, `CARTAO` → *Débito*, anything else the method of the last expense with the same description, or none |
 | `creditCardMetadata.cardNumber`, else the account's `number` | `card_last4`, on a card |
 | `paymentData.receiver.documentNumber.value`, else `merchant.cnpj` | `merchant_tax_id`, when it is a valid CPF or CNPJ |
 | `creditCardMetadata.installmentNumber` / `totalInstallments` | *parcela 3/10* in the description |

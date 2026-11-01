@@ -112,6 +112,11 @@ func (b *Bot) correct(ctx context.Context, user store.User, id int64, text strin
 		answer.text += "\n\n" + lessonsText(learned, cats)
 		answer.keyboard = forgetKeyboard(learned)
 	}
+	if text, err := b.rememberAccount(ctx, user.ID, e, saved); err != nil {
+		log.Printf("user %d: remembering the bank account of expense %d: %v", user.ID, id, err)
+	} else if text != "" {
+		answer.text += "\n\n" + text
+	}
 	return answer, &saved
 }
 

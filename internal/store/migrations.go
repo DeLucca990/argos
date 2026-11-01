@@ -327,4 +327,13 @@ CREATE INDEX bank_transactions_by_expense ON bank_transactions (expense_id);
 CREATE INDEX bank_transactions_by_account ON bank_transactions (account_id, spent_on);
 CREATE INDEX bank_transactions_by_description ON bank_transactions (user_id, description, id);
 `},
+	{name: "0009_bank_accounts", sql: `
+CREATE TABLE bank_accounts (
+    account_id TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users (id),
+    label      TEXT NOT NULL DEFAULT '',
+    card_last4 TEXT NOT NULL DEFAULT '' CHECK (card_last4 = '' OR card_last4 GLOB '[0-9][0-9][0-9][0-9]'),
+    updated_at TEXT NOT NULL
+);
+`},
 }

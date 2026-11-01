@@ -232,6 +232,68 @@ func TestReceiptAfterImportReplacesIt(t *testing.T) {
 	}
 }
 
+func TestCorrectionsCarryToLaterImports(t *testing.T) {
+	fx := answering(pharmacy())
+	b, user, fb := bankBot(t, fx)
+	fb.accounts[0].Number = ""
+	fb.txs["card"] = []pluggy.Transaction{spent("t1", "2026-10-15", "35.9", "IFD*IFOOD")}
+	fb.txs["checking"] = []pluggy.Transaction{spent("b1", "2026-10-12", "-80", "TED 001 JOAO")}
+	_, s := b.connect(ctx, user, testItem)
+	if len(s.added) != 2 {
+		t.Fatalf("first import: %d", len(s.added))
+	}
+	ted, ifood := s.added[0], s.added[1]
+	if ted.PaymentMethod != "" || ifood.CardLast4 != "" {
+		t.Fatalf("the bank said more than expected: %+v, %+v", ted, ifood)
+	}
+
+	renamed := rawFrom(ifood)
+	renamed.PaymentAccount, renamed.CardLast4 = "Nubank Ultravioleta", "4321"
+	fx.fixed = answer(renamed, 0.01)
+	r, _ := b.correct(ctx, user, ifood.ID, "é o Nubank Ultravioleta, final 4321")
+	if want := "desta conta: conta Nubank Ultravioleta, cartão final 4321"; !strings.Contains(r.text, want) {
+		t.Errorf("the correction lacks %q:\n%s", want, r.text)
+	}
+	paid := rawFrom(ted)
+	paid.PaymentMethod = "pix"
+	fx.fixed = answer(paid, 0.01)
+	r, _ = b.correct(ctx, user, ted.ID, "foi pix")
+	if want := "de <i>TED 001 JOAO</i> no extrato: pagamento Pix"; !strings.Contains(r.text, want) || strings.Contains(r.text, "desta conta") {
+		t.Errorf("the correction lacks %q:\n%s", want, r.text)
+	}
+
+	later := fb.item.LastUpdatedAt.Add(24 * time.Hour)
+	fb.item.LastUpdatedAt = &later
+	fb.txs["card"] = append(fb.txs["card"], spent("t2", "2026-10-19", "28", "PADARIA"))
+	fb.txs["checking"] = append(fb.txs["checking"], spent("b2", "2026-10-20", "-50", "TED 001 JOAO"),
+		pix("b3", "2026-10-20", "-30", "Maria Souza", "529.982.247-25", "123.456.789-09"))
+	s, err := b.syncItem(ctx, fb, s.item, false)
+	if err != nil || len(s.added) != 3 {
+		t.Fatalf("second import: %+v, %v", s.added, err)
+	}
+	padaria, joao, maria := s.added[0], s.added[1], s.added[2]
+	if padaria.Account != "Nubank Ultravioleta" || padaria.CardLast4 != "4321" || padaria.PaymentMethod != "credito" {
+		t.Errorf("the card's next purchase: %+v", padaria)
+	}
+	if joao.PaymentMethod != "pix" || joao.Account != "Nubank" || joao.CardLast4 != "" {
+		t.Errorf("the next TED: %+v", joao)
+	}
+	if maria.PaymentMethod != "pix" || maria.CardLast4 != "" {
+		t.Errorf("a Pix on the account: %+v", maria)
+	}
+	if line := fx.statements[len(fx.statements)-1].Lines[0]; line.Account != "Nubank Ultravioleta, cartão de crédito" {
+		t.Errorf("what the model was shown: %+v", line)
+	}
+
+	debit := spent("b4", "2026-10-20", "-15", "COMPRA CARTAO")
+	debit.OperationType = "CARTAO"
+	fb.txs["checking"] = append(fb.txs["checking"], debit)
+	s, err = b.syncItem(ctx, fb, s.item, true)
+	if err != nil || len(s.added) != 1 || s.added[0].CardLast4 != "" || s.added[0].PaymentMethod != "debito" {
+		t.Errorf("a card from another account was used: %+v, %v", s.added, err)
+	}
+}
+
 func TestFilingWaitsForTheModel(t *testing.T) {
 	fx := answering(pharmacy())
 	fx.fileErr = context.DeadlineExceeded

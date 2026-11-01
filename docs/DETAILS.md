@@ -386,12 +386,25 @@ sooner, not more of them; checking less often is fewer calls, and the same trans
   purchase on the card counts once.
 - **What it already knows** is not asked again: a transaction with a description the bank sent
   before is filed like the last one — its name, description and category, including a category
-  you changed with the button or by replying to its card. One left out as not spending is left
-  out again.
+  you changed with the button or by replying to its card, and its payment method when the bank
+  sends none. One left out as not spending is left out again.
 - The payment method, the account, the card's last four digits and the payee's CNPJ or CPF come
   from the bank's data, not the model: *Crédito* on a card, *Pix*, *Boleto* or *Débito* from an
   account. Through Meu Pluggy the account is the account's own name at the bank, since the
   connector's name — MeuPluggy — says nothing; reply to a card to fix one.
+- **A fix carries on.** A name or a card you give the account of an imported expense is used on
+  that account's next transactions — the card only on card payments the bank names no card for —
+  and a payment method you give where the bank sent none, on the next transaction with the same
+  description. The answer to the correction says so:
+
+  ```
+  🧠 Vou lembrar disso nos próximos gastos que vierem do banco:
+  • desta conta: conta Nubank Ultravioleta, cartão final 4321 quando o banco não informar o cartão
+  • de TED 001 JOAO no extrato: pagamento Pix
+  ```
+
+  Expenses already imported keep what they had. Connecting a bank again gives its accounts new
+  ids, so their names and cards are taught again.
 
 Each import is a message — how many, how much, how many were already there by receipt or had
 come through another connection, and how many were left out — followed by the cards of the
@@ -651,6 +664,7 @@ instead of skipping a step.
 | `lessons` | what each user taught by correcting: the field, the right value, and the kind of receipt or the recipient it applies to |
 | `bank_items` | each bank connection: its Pluggy item id, whose it is, its state, and since when it imports |
 | `bank_transactions` | every transaction taken from a bank, by its Pluggy id, and the expense it became or was matched to — none when it was not spending — so none comes in twice |
+| `bank_accounts` | the name and the card each user gave a bank account by correcting one of its expenses, by its Pluggy account id |
 
 Who may use the bot is still `TELEGRAM_ALLOWED_USER_IDS`; `users` records who did, and every
 expense and extraction belongs to one of them. Removing someone from the list stops them without

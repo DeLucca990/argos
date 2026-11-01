@@ -44,14 +44,15 @@ type bankAPI interface {
 }
 
 type bankSync struct {
-	item      store.BankItem
-	connector string
-	accounts  []pluggy.Account
-	added     []store.Expense
-	matched   int
-	carried   int
-	ignored   int
-	waiting   int
+	item       store.BankItem
+	connector  string
+	accounts   []pluggy.Account
+	remembered map[string]store.BankAccount
+	added      []store.Expense
+	matched    int
+	carried    int
+	ignored    int
+	waiting    int
 }
 
 type bankLine struct {
@@ -388,6 +389,9 @@ func (b *Bot) syncItem(ctx context.Context, api bankAPI, item store.BankItem, fo
 	if err != nil {
 		return s, err
 	}
+	if s.remembered, err = b.store.BankAccounts(ctx, item.UserID); err != nil {
+		return s, err
+	}
 
 	from := item.ImportFrom
 	if !item.SyncedAt.IsZero() {
@@ -451,7 +455,7 @@ func (b *Bot) reconcile(ctx context.Context, s *bankSync, a pluggy.Account, txs 
 		if known[t.ID] {
 			continue
 		}
-		line, ok := spendingLine(s.item.UserID, s.connector, a, t, now)
+		line, ok := spendingLine(s.item.UserID, nonEmpty(s.remembered[a.ID].Label, accountLabel(s.connector, a)), a, t, now)
 		if !ok {
 			continue
 		}
@@ -523,6 +527,12 @@ func (b *Bot) file(ctx context.Context, s *bankSync, lines []bankLine, cats cata
 		prev, e, found, err := b.store.LastFiled(ctx, s.item.UserID, l.tx.Description)
 		if err != nil {
 			return err
+		}
+		if l.expense.PaymentMethod == "" {
+			l.expense.PaymentMethod = e.PaymentMethod
+		}
+		if l.expense.CardLast4 == "" && (l.expense.PaymentMethod == "credito" || l.expense.PaymentMethod == "debito") {
+			l.expense.CardLast4 = s.remembered[l.tx.AccountID].CardLast4
 		}
 		switch c := cats.of(e.Category); {
 		case !found || l.prompt.Installment != "":
@@ -612,7 +622,45 @@ func (b *Bot) addBankExpense(ctx context.Context, s *bankSync, l bankLine) error
 	return nil
 }
 
-func spendingLine(userID int64, connector string, a pluggy.Account, t pluggy.Transaction, now time.Time) (bankLine, bool) {
+func (b *Bot) rememberAccount(ctx context.Context, userID int64, before, after store.Expense) (string, error) {
+	if before.Source != store.SourceBank {
+		return "", nil
+	}
+	t, err := b.store.BankTransactionFor(ctx, before.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	a := store.BankAccount{AccountID: t.AccountID, UserID: userID}
+	var account, lines []string
+	if after.Account != before.Account && after.Account != "" {
+		a.Label = after.Account
+		account = append(account, "conta "+html.EscapeString(after.Account))
+	}
+	if after.CardLast4 != before.CardLast4 && after.CardLast4 != "" {
+		a.CardLast4 = after.CardLast4
+		account = append(account, "cartão final "+after.CardLast4+" quando o banco não informar o cartão")
+	}
+	if len(account) > 0 {
+		if err := b.store.RememberBankAccount(ctx, a); err != nil {
+			return "", err
+		}
+		lines = append(lines, "desta conta: "+strings.Join(account, ", "))
+	}
+	if before.PaymentMethod == "" && after.PaymentMethod != "" && t.Description != "" {
+		lines = append(lines, "de <i>"+html.EscapeString(t.Description)+"</i> no extrato: pagamento "+
+			paymentLabels[after.PaymentMethod])
+	}
+	if len(lines) == 0 {
+		return "", nil
+	}
+	return "🧠 Vou lembrar disso nos próximos gastos que vierem do banco:\n• " + strings.Join(lines, "\n• "), nil
+}
+
+func spendingLine(userID int64, account string, a pluggy.Account, t pluggy.Transaction, now time.Time) (bankLine, bool) {
 	if t.Type != "DEBIT" || t.OperationType == "PAGAMENTO_FATURA" || ownTransfer(a, t) {
 		return bankLine{}, false
 	}
@@ -630,7 +678,6 @@ func spendingLine(userID int64, connector string, a pluggy.Account, t pluggy.Tra
 	}
 	currency = strings.ToUpper(nonEmpty(strings.TrimSpace(currency), "BRL"))
 
-	account := accountLabel(connector, a)
 	payment := paymentOf(a, t)
 	description := strings.TrimSpace(t.Description)
 	installment := ""

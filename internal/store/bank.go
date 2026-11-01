@@ -38,6 +38,13 @@ type BankTransaction struct {
 	ExpenseID   int64
 }
 
+type BankAccount struct {
+	AccountID string
+	UserID    int64
+	Label     string
+	CardLast4 string
+}
+
 const bankItemColumns = `id, pluggy_id, user_id, name, status, error, import_from, imported_upto, synced_at,
 	consent_until, created_at`
 
@@ -215,6 +222,35 @@ func (s *Store) insertBankTransaction(ctx context.Context, q interface {
 		t.PluggyID, t.UserID, t.AccountID, t.ProviderID, t.SpentOn.Format(dateLayout), t.TotalCents, t.Description,
 		nullInt(t.ExpenseID), s.timestamp())
 	return err
+}
+
+func (s *Store) RememberBankAccount(ctx context.Context, a BankAccount) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO bank_accounts (account_id, user_id, label, card_last4, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (account_id) DO UPDATE SET
+			label = CASE WHEN excluded.label != '' THEN excluded.label ELSE label END,
+			card_last4 = CASE WHEN excluded.card_last4 != '' THEN excluded.card_last4 ELSE card_last4 END,
+			updated_at = excluded.updated_at
+		WHERE user_id = excluded.user_id`, a.AccountID, a.UserID, a.Label, a.CardLast4, s.timestamp())
+	return err
+}
+
+func (s *Store) BankAccounts(ctx context.Context, userID int64) (map[string]BankAccount, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT account_id, user_id, label, card_last4 FROM bank_accounts
+		WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	accounts := map[string]BankAccount{}
+	for rows.Next() {
+		var a BankAccount
+		if err := rows.Scan(&a.AccountID, &a.UserID, &a.Label, &a.CardLast4); err != nil {
+			return nil, err
+		}
+		accounts[a.AccountID] = a
+	}
+	return accounts, rows.Err()
 }
 
 func (s *Store) MatchExpense(ctx context.Context, userID, cents int64, on time.Time) (Expense, bool, error) {
