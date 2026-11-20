@@ -300,28 +300,6 @@ func (s *Store) SetCategory(ctx context.Context, userID, id int64, category stri
 	return e, err
 }
 
-func (s *Store) Undo(ctx context.Context, userID int64) (Expense, error) {
-	var e Expense
-	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		var id int64
-		err := tx.QueryRowContext(ctx, `SELECT id FROM expenses WHERE user_id = ? AND status = 'confirmed'
-			ORDER BY confirmed_at DESC, id DESC LIMIT 1`, userID).Scan(&id)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE expenses SET status = 'discarded', updated_at = ? WHERE id = ?`,
-			s.timestamp(), id); err != nil {
-			return err
-		}
-		e, err = expenseWithItems(ctx, tx, id)
-		return err
-	})
-	return e, err
-}
-
 func changedOne(ctx context.Context, q querier, res sql.Result, userID, id int64) error {
 	n, err := res.RowsAffected()
 	if err != nil || n == 1 {

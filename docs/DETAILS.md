@@ -474,8 +474,6 @@ asks, Pluggy never calls it, so it needs no open port.
 | `/hoje` | today's expenses, one per line, with the time when the receipt had one |
 | `/semana` | this calendar week, Monday to Sunday, by category |
 | `/mes [mês]` | a month by category, with each one's share; the current month unless named |
-| `/ultimos [n]` | the latest expenses, 10 unless a number up to 50 follows |
-| `/desfazer` | discards the expense saved last — the same as its card's Descartar |
 | `/exportar [mês \| tudo]` | a month, or everything, as a CSV file |
 | `/resumo [mês]` | the monthly digest below, for any month; the last closed one unless named |
 | `/categorias` | the default categories, then yours with their hints; ➕ to create one, and a button to edit or remove each |

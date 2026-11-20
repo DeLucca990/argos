@@ -894,7 +894,7 @@ func syncText(s bankSync) string {
 			"tento de novo na próxima conferência.", s.waiting, plural(s.waiting, "espera", "esperam")))
 	}
 	if len(s.added) > bankCards {
-		parts = append(parts, fmt.Sprintf("Mostro os %d mais recentes; os outros estão em /ultimos.", bankCards))
+		parts = append(parts, fmt.Sprintf("Mostro os %d mais recentes; os outros aparecem em /mes e /exportar.", bankCards))
 	}
 	return strings.Join(parts, "\n")
 }

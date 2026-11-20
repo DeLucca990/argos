@@ -100,34 +100,6 @@ func TestParseMonth(t *testing.T) {
 	}
 }
 
-func TestRecentAndUndo(t *testing.T) {
-	b, user := testBot(t, answering(pharmacy()))
-	if text, _ := b.undoText(ctx, user.ID); !strings.Contains(text, "Não há gasto") {
-		t.Errorf("undo with nothing saved: %q", text)
-	}
-	seed(t, b, user)
-
-	all, _ := b.recentText(ctx, user.ID, "")
-	if !strings.Contains(all, "Últimos 5 gastos") || strings.Index(all, "HYPERLINK") > strings.Index(all, "Padaria") {
-		t.Errorf("/ultimos:\n%s", all)
-	}
-	if two, _ := b.recentText(ctx, user.ID, "2"); strings.Count(two, "\n•") != 2 {
-		t.Errorf("/ultimos 2:\n%s", two)
-	}
-	var usage usageError
-	if _, err := b.recentText(ctx, user.ID, "muitos"); !errors.As(err, &usage) {
-		t.Errorf("/ultimos muitos: %v", err)
-	}
-
-	undo, err := b.undoText(ctx, user.ID)
-	if err != nil || !strings.Contains(undo, "Drogaria, R$ 42,30 em 30/09/2026") {
-		t.Errorf("/desfazer: %q, %v", undo, err)
-	}
-	if after, _ := b.recentText(ctx, user.ID, ""); strings.Contains(after, "Drogaria") || !strings.Contains(after, "Últimos 4") {
-		t.Errorf("after /desfazer:\n%s", after)
-	}
-}
-
 func TestExportCSV(t *testing.T) {
 	b, user := testBot(t, answering(pharmacy()))
 	seed(t, b, user)

@@ -17,14 +17,12 @@ var commands = []command{
 	{name: "hoje", description: "Os gastos de hoje"},
 	{name: "semana", description: "Esta semana, por categoria"},
 	{name: "mes", description: "O mês, por categoria", usage: "[2026-10 | outubro]"},
-	{name: "ultimos", description: "Os últimos gastos", usage: "[quantos]"},
-	{name: "desfazer", description: "Descarta o último gasto salvo"},
 	{name: "exportar", description: "O mês numa planilha CSV", usage: "[2026-10 | tudo]"},
 	{name: "resumo", description: "O resumo de um mês, comparado ao anterior", usage: "[mês]"},
 	{name: "categorias", description: "As categorias, e as suas para criar e editar"},
 	{name: "bancos", description: "Os bancos conectados pelo Open Finance", bank: true},
 	{name: "conectar", description: "Conecta um banco pelo Open Finance", usage: "[id do item]", bank: true},
-	{name: "cost", description: "Quanto as leituras custaram"},
+	{name: "cost", description: "Custos do modelo de IA"},
 	{name: "help", description: "O que este bot sabe fazer"},
 }
 

@@ -19,11 +19,7 @@ import (
 	"github.com/DeLucca990/argos/internal/store"
 )
 
-const (
-	defaultRecent = 10
-	maxRecent     = 50
-	maxDayLines   = 30
-)
+const maxDayLines = 30
 
 var sourceLabels = map[store.Source]string{
 	store.SourcePhoto: "foto", store.SourcePDF: "pdf", store.SourceText: "texto", store.SourceBank: "banco",
@@ -51,11 +47,6 @@ func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest str
 			break
 		}
 		text, err = b.summaryText(ctx, user.ID, p)
-	case "ultimos":
-		text, err = b.recentText(ctx, user.ID, rest)
-	case "desfazer":
-		text, err = b.undoText(ctx, user.ID)
-		log.Printf("user %d: /desfazer", user.ID)
 	case "exportar":
 		b.export(ctx, msg, rest, now)
 		return
@@ -172,49 +163,6 @@ func (b *Bot) summaryText(ctx context.Context, userID int64, p period) (string, 
 			receipt.FormatBRL(c.TotalCents), (c.TotalCents*100+sum.TotalCents/2)/sum.TotalCents, c.Count)
 	}
 	return s.String(), nil
-}
-
-func (b *Bot) recentText(ctx context.Context, userID int64, arg string) (string, error) {
-	n := defaultRecent
-	if arg = strings.TrimSpace(arg); arg != "" {
-		v, err := strconv.Atoi(arg)
-		if err != nil || v < 1 {
-			return "", usageError{"Diga quantos gastos mostrar, por exemplo /ultimos 20."}
-		}
-		n = min(v, maxRecent)
-	}
-	list, err := b.store.Recent(ctx, userID, n)
-	if err != nil {
-		return "", err
-	}
-	if len(list) == 0 {
-		return "Nenhum gasto registrado ainda.", nil
-	}
-	cats, err := b.categories(ctx, userID)
-	if err != nil {
-		return "", err
-	}
-
-	var s strings.Builder
-	fmt.Fprintf(&s, "🧾 <b>Últimos %d gastos</b>\n\n", len(list))
-	for _, e := range list {
-		s.WriteString("• " + e.SpentOn.Format("02/01") + " " + line(e, cats) + "\n")
-	}
-	return s.String(), nil
-}
-
-func (b *Bot) undoText(ctx context.Context, userID int64) (string, error) {
-	e, err := b.store.Undo(ctx, userID)
-	if errors.Is(err, store.ErrNotFound) {
-		return "Não há gasto salvo para desfazer.", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("↩️ Descartei o último gasto salvo: %s, %s em %s.\n\n"+
-		"Ele sai dos totais. Para registrá-lo de novo, mande o comprovante outra vez.",
-		html.EscapeString(nonEmpty(e.Merchant, e.Description, "gasto")), money(e.TotalCents, e.Currency),
-		e.SpentOn.Format("02/01/2006")), nil
 }
 
 func (b *Bot) costText(ctx context.Context, now time.Time) (string, error) {

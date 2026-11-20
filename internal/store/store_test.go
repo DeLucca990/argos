@@ -300,27 +300,9 @@ func TestDuplicates(t *testing.T) {
 		}
 	}
 
-	s.Undo(ctx, me)
+	s.Discard(ctx, me, id)
 	if _, err := s.AddExpense(ctx, sameReceipt); err != nil {
 		t.Errorf("a receipt whose first record was discarded was refused: %v", err)
-	}
-}
-
-func TestUndoDiscardsTheLastConfirmed(t *testing.T) {
-	s := open(t)
-	older := confirmed(t, s, expense(me, "2026-10-19", 100, "mercado"))
-	newer := confirmed(t, s, expense(me, "2026-10-01", 200, "mercado"))
-	confirmed(t, s, expense(them, "2026-10-20", 300, "mercado"))
-	add(t, s, expense(me, "2026-10-20", 400, "mercado"))
-
-	for _, want := range []int64{newer, older} {
-		e, err := s.Undo(ctx, me)
-		if err != nil || e.ID != want || e.Status != Discarded {
-			t.Fatalf("undo: got %d (%s), %v, want %d", e.ID, e.Status, err, want)
-		}
-	}
-	if _, err := s.Undo(ctx, me); !errors.Is(err, ErrNotFound) {
-		t.Errorf("nothing left to undo: %v", err)
 	}
 }
 
