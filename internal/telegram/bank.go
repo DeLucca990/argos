@@ -340,7 +340,7 @@ func (b *Bot) sendCards(ctx context.Context, chatID int64, list []store.Expense)
 		list = list[len(list)-bankCards:]
 	}
 	for _, e := range list {
-		r := b.card(ctx, e, false)
+		r := b.card(ctx, e, showCard)
 		r.silent = true
 		if id := b.show(ctx, chatID, 0, r); id != 0 {
 			if err := b.store.RememberCard(ctx, chatID, id, e.ID); err != nil {

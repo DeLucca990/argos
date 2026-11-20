@@ -58,7 +58,7 @@ func TestLearningFromACorrection(t *testing.T) {
 		t.Errorf("the model was given %+v", given)
 	}
 	e, _ := b.store.Expense(ctx, 2)
-	if card := b.card(ctx, e, false).text; !strings.Contains(card, "🧠 <i>Lembrado das suas correções: conta.</i>") || !strings.Contains(card, "Pix · Nubank") {
+	if card := b.card(ctx, e, showCard).text; !strings.Contains(card, "🧠 <i>Lembrado das suas correções: conta.</i>") || !strings.Contains(card, "Pix · Nubank") {
 		t.Errorf("the card does not say what was remembered:\n%s", card)
 	}
 

@@ -218,8 +218,8 @@ leitura (claude-opus-5-5): ≈ US$ 0,0400 · 6.000 tokens: 5.000 entrada, 1.000 
 
 It is saved as soon as it is read — there is no confirmation step. **Categoria** swaps the
 buttons for the categories — the ones used most in the last 90 days first, *Outros* last;
-**Descartar** keeps the record but leaves it out of every total, and frees the receipt to be
-sent again.
+**Descartar** asks first — *Sim, descartar* or *Voltar* — and then keeps the record but leaves
+it out of every total, and frees the receipt to be sent again.
 
 **Sixteen categories are the same for everyone**, and nobody changes them from the chat. On top
 of them each person adds their own with **➕ Nova categoria**, at the bottom of `/categorias` —

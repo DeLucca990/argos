@@ -36,6 +36,14 @@ type reply struct {
 	silent    bool
 }
 
+type cardView int
+
+const (
+	showCard cardView = iota
+	pickCategory
+	confirmDiscard
+)
+
 type details struct {
 	warnings   []string
 	notes      string
@@ -45,16 +53,23 @@ type details struct {
 	model      string
 }
 
-func (b *Bot) card(ctx context.Context, e store.Expense, picking bool) reply {
+func (b *Bot) card(ctx context.Context, e store.Expense, v cardView) reply {
 	cats, err := b.categories(ctx, e.UserID)
 	if err != nil {
 		log.Printf("expense %d: %v", e.ID, err)
 	}
+	if e.Status == store.Discarded {
+		v = showCard
+	}
 	var choices catalog
-	if picking {
+	if v == pickCategory {
 		choices = b.byUse(ctx, e.UserID, cats)
 	}
-	return reply{text: cardText(e, b.details(ctx, e), cats), keyboard: keyboard(e, picking, choices)}
+	text := cardText(e, b.details(ctx, e), cats)
+	if v == confirmDiscard {
+		text += "\n\n⚠️ <b>Descartar este gasto?</b> Ele sai de todos os totais."
+	}
+	return reply{text: text, keyboard: keyboard(e, v, choices)}
 }
 
 func (b *Bot) details(ctx context.Context, e store.Expense) details {
@@ -188,7 +203,7 @@ func money(cents int64, currency string) string {
 	return strings.Replace(brl, "R$", html.EscapeString(currency), 1)
 }
 
-func keyboard(e store.Expense, picking bool, choices catalog) *models.InlineKeyboardMarkup {
+func keyboard(e store.Expense, v cardView, choices catalog) *models.InlineKeyboardMarkup {
 	button := func(text, action string) models.InlineKeyboardButton {
 		return models.InlineKeyboardButton{Text: text, CallbackData: callbackData(e.ID, action)}
 	}
@@ -196,7 +211,11 @@ func keyboard(e store.Expense, picking bool, choices catalog) *models.InlineKeyb
 	switch {
 	case e.Status == store.Discarded:
 		return nil
-	case picking:
+	case v == confirmDiscard:
+		return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
+			button("❌ Sim, descartar", "rm"), button("↩️ Voltar", "back"),
+		}}}
+	case v == pickCategory:
 		var rows [][]models.InlineKeyboardButton
 		for i, c := range choices {
 			text := c.Emoji + " " + c.Label

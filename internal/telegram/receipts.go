@@ -197,7 +197,7 @@ func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {
 		log.Printf("expense %d: reading it back: %v", id, err)
 		return reply{text: dbErrorText}
 	}
-	out := b.card(ctx, e, false)
+	out := b.card(ctx, e, showCard)
 	out.expenseID = id
 	return out
 }

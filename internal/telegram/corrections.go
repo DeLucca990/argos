@@ -37,7 +37,7 @@ func (b *Bot) onCorrection(ctx context.Context, msg *models.Message, expenseID i
 	b.process(ctx, msg, "✏️ Corrigindo…", func(ctx context.Context) reply {
 		r, updated := b.correct(ctx, userFrom(ctx), expenseID, msg.Text)
 		if updated != nil {
-			b.edit(ctx, msg.Chat.ID, cardID, b.card(ctx, *updated, false))
+			b.edit(ctx, msg.Chat.ID, cardID, b.card(ctx, *updated, showCard))
 		}
 		return r
 	})

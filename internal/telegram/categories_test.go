@@ -109,7 +109,7 @@ func TestPickingACategoryByItsID(t *testing.T) {
 	theirs, _, _ := b.store.SaveCategory(ctx, other.ID, store.Category{Label: "Cassino", Emoji: "🎰"})
 
 	e, _ := b.store.Expense(ctx, 1)
-	picker := b.card(ctx, e, true).keyboard.InlineKeyboard
+	picker := b.card(ctx, e, pickCategory).keyboard.InlineKeyboard
 	button := picker[7][1]
 	if picker[0][0].Text != "✓ 💊 Farmácia" || picker[0][1].Text != "🛒 Mercado" {
 		t.Errorf("the category in use goes first: %+v", picker[0])
@@ -209,10 +209,10 @@ func TestCategoryMenu(t *testing.T) {
 		t.Errorf("the menu still lists it: %v", got)
 	}
 	e, _ := b.store.Expense(ctx, 1)
-	if e.Category != "musculacao" || !strings.Contains(b.card(ctx, e, false).text, "💪 Musculação") {
+	if e.Category != "musculacao" || !strings.Contains(b.card(ctx, e, showCard).text, "💪 Musculação") {
 		t.Errorf("the expense left its archived category: %+v", e)
 	}
-	for _, row := range b.card(ctx, e, true).keyboard.InlineKeyboard {
+	for _, row := range b.card(ctx, e, pickCategory).keyboard.InlineKeyboard {
 		for _, button := range row {
 			if strings.Contains(button.Text, "Musculação") {
 				t.Errorf("the picker offers an archived category")
@@ -283,7 +283,7 @@ func TestNewCategoryFromTheList(t *testing.T) {
 
 	b.read(ctx, user, incoming{data: photo, mime: "image/jpeg", source: store.SourcePhoto})
 	e, _ := b.store.Expense(ctx, 1)
-	for _, row := range b.card(ctx, e, true).keyboard.InlineKeyboard {
+	for _, row := range b.card(ctx, e, pickCategory).keyboard.InlineKeyboard {
 		for _, button := range row {
 			if strings.Contains(button.Text, "Nova") || strings.HasSuffix(button.CallbackData, ":new") {
 				t.Errorf("the card's picker offers to create a category: %+v", button)

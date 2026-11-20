@@ -21,21 +21,26 @@ func (b *Bot) onCallback(ctx context.Context, q *models.CallbackQuery) {
 	}
 
 	var (
-		e       store.Expense
-		err     error
-		toast   string
-		picking bool
+		e     store.Expense
+		err   error
+		toast string
+		v     cardView
 	)
 	switch action {
 	case "ok":
 		e, err = b.store.Confirm(ctx, user.ID, id)
 		toast = "Salvo."
 	case "no":
+		e, err = b.owned(ctx, user.ID, id)
+		v = confirmDiscard
+	case "rm":
 		e, err = b.store.Discard(ctx, user.ID, id)
 		toast = "Descartado."
 	case "cat", "back":
 		e, err = b.owned(ctx, user.ID, id)
-		picking = action == "cat"
+		if action == "cat" {
+			v = pickCategory
+		}
 	case "c":
 		var cats catalog
 		if cats, err = b.categories(ctx, user.ID); err != nil {
@@ -72,11 +77,11 @@ func (b *Bot) onCallback(ctx context.Context, q *models.CallbackQuery) {
 		return
 	}
 
-	if action == "ok" || action == "no" {
+	if action == "ok" || action == "rm" {
 		log.Printf("user %d: expense %d %s", user.ID, id, e.Status)
 	}
 	chatID, messageID := callbackTarget(q)
-	b.edit(ctx, chatID, messageID, b.card(ctx, e, picking && e.Status != store.Discarded))
+	b.edit(ctx, chatID, messageID, b.card(ctx, e, v))
 	b.answer(ctx, q, toast)
 }
 

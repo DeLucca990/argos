@@ -202,13 +202,13 @@ func TestTheCardSurvivesAButtonPress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := b.card(ctx, e, false)
+	r := b.card(ctx, e, showCard)
 	if !strings.Contains(r.text, "🩺 Saúde") || !strings.Contains(r.text, "⚠️ A soma dos itens") ||
 		!strings.Contains(r.text, "📝 o último dígito") || !strings.Contains(r.text, "✅ <b>Salvo.</b>") {
 		t.Errorf("after changing the category:\n%s", r.text)
 	}
 
-	picker := b.card(ctx, e, true).keyboard.InlineKeyboard
+	picker := b.card(ctx, e, pickCategory).keyboard.InlineKeyboard
 	if len(picker) != 9 || picker[0][0].Text != "✓ 🩺 Saúde" || picker[0][0].CallbackData != "ex:1:c:6" ||
 		len(picker[8]) != 1 || picker[8][0].CallbackData != "ex:1:back" {
 		t.Errorf("the category picker: %+v", picker)
@@ -218,8 +218,43 @@ func TestTheCardSurvivesAButtonPress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r := b.card(ctx, discarded, true); r.keyboard != nil || !strings.Contains(r.text, "Descartado") {
+	if r := b.card(ctx, discarded, pickCategory); r.keyboard != nil || !strings.Contains(r.text, "Descartado") {
 		t.Errorf("a discarded expense has no buttons: %+v", r.keyboard)
+	}
+}
+
+func TestDiscardAsksFirst(t *testing.T) {
+	b, user := testBot(t, answering(pharmacy()))
+	calls := fakeTelegram(t, b)
+	b.read(ctx, user, incoming{data: photo, mime: "image/jpeg", source: store.SourcePhoto})
+	press := func(data string) { pressOn(b, user, 10, data) }
+
+	press("ex:1:no")
+	if e, _ := b.store.Expense(ctx, 1); e.Status != store.Confirmed {
+		t.Fatalf("discarded without asking: %s", e.Status)
+	}
+	got := calls.last("editMessageText")
+	if !strings.Contains(got["text"], "Descartar este gasto?") ||
+		!strings.Contains(got["reply_markup"], `"ex:1:rm"`) || !strings.Contains(got["reply_markup"], `"ex:1:back"`) {
+		t.Errorf("the question: %v", got)
+	}
+
+	press("ex:1:back")
+	if got := calls.last("editMessageText"); strings.Contains(got["text"], "Descartar este gasto?") || !strings.Contains(got["reply_markup"], `"ex:1:no"`) {
+		t.Errorf("going back: %v", got)
+	}
+
+	press("ex:1:rm")
+	if e, _ := b.store.Expense(ctx, 1); e.Status != store.Discarded {
+		t.Errorf("after confirming: %s", e.Status)
+	}
+	if got := calls.last("answerCallbackQuery"); got["text"] != "Descartado." {
+		t.Errorf("the toast: %v", got)
+	}
+
+	press("ex:1:no")
+	if got := calls.last("editMessageText"); strings.Contains(got["text"], "Descartar este gasto?") || got["reply_markup"] != "" {
+		t.Errorf("asking again about a discarded expense: %v", got)
 	}
 }
 

@@ -49,7 +49,7 @@ func TestCorrectAppliesWhatTheModelChanged(t *testing.T) {
 	if e.TotalCents != 4590 || e.PaymentMethod != "credito" || e.Category != "saude" || e.Status != store.Confirmed || len(e.Items) != 0 {
 		t.Errorf("the expense: %+v", e)
 	}
-	card := b.card(ctx, *updated, false)
+	card := b.card(ctx, *updated, showCard)
 	if !strings.Contains(card.text, "R$ 45,90") || !strings.Contains(card.text, "US$ 0,0500") || strings.Contains(card.text, "soma dos itens") {
 		t.Errorf("the card after the correction:\n%s", card.text)
 	}

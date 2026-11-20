@@ -147,7 +147,7 @@ func TestConnectImportsTheMonth(t *testing.T) {
 	if calls, _ := b.store.Calls(ctx, time.Time{}); calls[store.KindBank] != 1 {
 		t.Errorf("model calls: %v", calls)
 	}
-	card := b.card(ctx, ifood, false).text
+	card := b.card(ctx, ifood, showCard).text
 	if !strings.HasPrefix(card, "🏦 <b>iFood</b>") || !strings.Contains(card, "No extrato: <i>IFD*IFOOD</i>") {
 		t.Errorf("card:\n%s", card)
 	}
