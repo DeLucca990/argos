@@ -121,6 +121,7 @@ func (b *Bot) process(ctx context.Context, msg *models.Message, label string, wo
 			log.Printf("expense %d: remembering its card: %v", r.expenseID, err)
 		}
 	}
+	b.postPicture(ctx, msg.Chat.ID, r.photo)
 }
 
 func (b *Bot) read(ctx context.Context, user store.User, in incoming) reply {

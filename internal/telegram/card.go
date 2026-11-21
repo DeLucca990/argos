@@ -34,6 +34,7 @@ type reply struct {
 	keyboard  *models.InlineKeyboardMarkup
 	expenseID int64
 	silent    bool
+	photo     *picture
 }
 
 type cardView int

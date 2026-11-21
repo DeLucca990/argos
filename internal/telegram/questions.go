@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"html"
 	"log"
 	"strings"
 	"time"
@@ -88,7 +89,11 @@ func (b *Bot) question(ctx context.Context, user store.User, text string) reply 
 	if ans.Reset {
 		out = "<i>(a conversa ficou longa: recomecei do zero)</i>\n\n" + out
 	}
-	return reply{text: out}
+	r := reply{text: out}
+	if ans.Chart != nil {
+		r.photo = &picture{png: ans.Chart.PNG, caption: "📊 " + html.EscapeString(ans.Chart.Title)}
+	}
+	return r
 }
 
 func questionError(err error) string {

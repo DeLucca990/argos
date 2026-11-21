@@ -1,4 +1,4 @@
-.PHONY: build test run up down logs db db-copy db-backups db-migrate db-web db-web-stop db-ro db-ro-stop eval eval-init
+.PHONY: build test run up down logs db db-copy db-backups db-migrate db-web db-web-stop db-ro db-ro-stop
 
 DB_COPY ?= /tmp/argos-copy.db
 BACKUPS ?= backups
@@ -60,9 +60,3 @@ db-ro:
 
 db-ro-stop:
 	docker compose --profile db-ro stop sqlite-ro
-
-eval:
-	go run ./cmd/eval $(if $(MODEL),-model $(MODEL)) $(if $(EFFORT),-effort $(EFFORT))
-
-eval-init:
-	go run ./cmd/eval -init $(if $(MODEL),-model $(MODEL))

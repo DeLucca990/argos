@@ -90,7 +90,7 @@ func testBot(t *testing.T, fx *fakeExtractor) (*Bot, store.User) {
 	t.Cleanup(func() { st.Close() })
 
 	b := &Bot{cfg: Config{DataDir: dir, Model: "claude-opus-5-5"}, store: st, extractor: fx, now: func() time.Time { return fixed },
-		slots: make(chan struct{}, maxConcurrency)}
+		slots: make(chan struct{}, maxConcurrency), sendPhoto: func(context.Context, int64, picture) error { return nil }}
 	os.MkdirAll(filepath.Join(dir, receiptsDir), 0o750)
 	user, err := st.SaveUser(ctx, store.User{TelegramID: 8683784233, FirstName: "Ana"})
 	if err != nil {

@@ -101,8 +101,8 @@ func TestMonthDigest(t *testing.T) {
 	if text, count, _ := b.monthDigest(ctx, user.ID, july, fixed); count != 0 || !strings.Contains(text, "Nenhum gasto") {
 		t.Errorf("an empty month: %q", text)
 	}
-	if text, _ := b.digestCommand(ctx, user.ID, "", fixed); !strings.Contains(text, "Resumo de setembro de 2026") {
-		t.Errorf("/resumo with no month is the last closed one:\n%s", text)
+	if r, _ := b.digestCommand(ctx, user.ID, "", fixed); !strings.Contains(r.text, "Resumo de setembro de 2026") {
+		t.Errorf("/resumo with no month is the last closed one:\n%s", r.text)
 	}
 }
 

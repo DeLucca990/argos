@@ -83,6 +83,7 @@ func (b *Bot) sendDigests(ctx context.Context, now time.Time) {
 				continue
 			default:
 				outcome = fmt.Sprintf("sent, %d expenses", count)
+				b.digestChart(ctx, u, p)
 			}
 		}
 		if err := b.store.MarkDigestSent(ctx, u.ID, p.slug); err != nil {
@@ -93,7 +94,7 @@ func (b *Bot) sendDigests(ctx context.Context, now time.Time) {
 	}
 }
 
-func (b *Bot) digestCommand(ctx context.Context, userID int64, arg string, now time.Time) (string, error) {
+func (b *Bot) digestCommand(ctx context.Context, userID int64, arg string, now time.Time) (reply, error) {
 	var p period
 	if strings.TrimSpace(arg) == "" {
 		first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
@@ -101,11 +102,15 @@ func (b *Bot) digestCommand(ctx context.Context, userID int64, arg string, now t
 	} else {
 		var err error
 		if p, err = parseMonth(arg, now); err != nil {
-			return "", usageError{err.Error()}
+			return reply{}, usageError{err.Error()}
 		}
 	}
-	text, _, err := b.monthDigest(ctx, userID, p, now)
-	return text, err
+	text, count, err := b.monthDigest(ctx, userID, p, now)
+	r := reply{text: text}
+	if err == nil && count > 0 {
+		r = b.withChart(ctx, userID, r, "pace", p)
+	}
+	return r, err
 }
 
 func (b *Bot) monthDigest(ctx context.Context, userID int64, p period, now time.Time) (string, int, error) {

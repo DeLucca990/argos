@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -100,6 +101,17 @@ func (s *Store) Totals(ctx context.Context, userID int64, f Filter, groupBy stri
 		groups = append(groups, g)
 	}
 	return groups, rows.Err()
+}
+
+func (s *Store) FirstSpent(ctx context.Context, userID int64) (time.Time, bool, error) {
+	var on sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT MIN(spent_on) FROM expenses WHERE user_id = ? AND status = 'confirmed'`,
+		userID).Scan(&on)
+	if err != nil || !on.Valid {
+		return time.Time{}, false, err
+	}
+	t, err := time.ParseInLocation(dateLayout, on.String, time.Local)
+	return t, err == nil, err
 }
 
 func (s *Store) Find(ctx context.Context, userID int64, f Filter, byTotal bool, limit int) ([]Expense, error) {

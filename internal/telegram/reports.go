@@ -32,26 +32,26 @@ func (e usageError) Error() string { return e.msg }
 func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest string) {
 	user, chatID, now := userFrom(ctx), msg.Chat.ID, b.now()
 	var (
-		text string
-		err  error
+		r   reply
+		err error
 	)
 	switch name {
 	case "hoje":
-		text, err = b.dayText(ctx, user.ID, now)
+		r.text, err = b.dayText(ctx, user.ID, now)
 	case "semana":
-		text, err = b.summaryText(ctx, user.ID, weekPeriod(now))
+		r, err = b.summary(ctx, user.ID, weekPeriod(now))
 	case "mes":
 		var p period
 		if p, err = parseMonth(rest, now); err != nil {
 			err = usageError{err.Error()}
 			break
 		}
-		text, err = b.summaryText(ctx, user.ID, p)
+		r, err = b.summary(ctx, user.ID, p)
 	case "exportar":
 		b.export(ctx, msg, rest, now)
 		return
 	case "resumo":
-		text, err = b.digestCommand(ctx, user.ID, rest, now)
+		r, err = b.digestCommand(ctx, user.ID, rest, now)
 	case "categorias":
 		r, err := b.categoryMenu(ctx, user.ID)
 		if err != nil {
@@ -74,20 +74,20 @@ func (b *Bot) onCommand(ctx context.Context, msg *models.Message, name, rest str
 		b.onConnect(ctx, msg, rest)
 		return
 	case "cost":
-		text, err = b.costText(ctx, now)
+		r.text, err = b.costText(ctx, now)
 	default:
-		text = b.helpText(user.TelegramID)
+		r.text = b.helpText(user.TelegramID)
 	}
 
 	var usage usageError
 	switch {
 	case errors.As(err, &usage):
-		text = "⚠️ " + html.EscapeString(usage.msg)
+		r = reply{text: "⚠️ " + html.EscapeString(usage.msg)}
 	case err != nil:
 		log.Printf("user %d: /%s: %v", user.ID, name, err)
-		text = dbErrorText
+		r = reply{text: dbErrorText}
 	}
-	b.sendHTML(ctx, chatID, text)
+	b.send(ctx, chatID, r)
 }
 
 func (b *Bot) export(ctx context.Context, msg *models.Message, arg string, now time.Time) {
@@ -151,10 +151,19 @@ func (b *Bot) dayText(ctx context.Context, userID int64, now time.Time) (string,
 	return s.String(), nil
 }
 
-func (b *Bot) summaryText(ctx context.Context, userID int64, p period) (string, error) {
+func (b *Bot) summary(ctx context.Context, userID int64, p period) (reply, error) {
+	text, count, err := b.summaryText(ctx, userID, p)
+	r := reply{text: text}
+	if err == nil && count > 0 {
+		r = b.withChart(ctx, userID, r, "category", p)
+	}
+	return r, err
+}
+
+func (b *Bot) summaryText(ctx context.Context, userID int64, p period) (string, int, error) {
 	sum, err := b.store.Summary(ctx, userID, p.from, p.to)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	var s strings.Builder
 	s.WriteString(header(p.title, sum.TotalCents, sum.Count))
@@ -162,7 +171,7 @@ func (b *Bot) summaryText(ctx context.Context, userID int64, p period) (string, 
 		fmt.Fprintf(&s, "%s %s — %s (%d%%) · %d\n", c.Category.Emoji, html.EscapeString(c.Category.Label),
 			receipt.FormatBRL(c.TotalCents), (c.TotalCents*100+sum.TotalCents/2)/sum.TotalCents, c.Count)
 	}
-	return s.String(), nil
+	return s.String(), sum.Count, nil
 }
 
 func (b *Bot) costText(ctx context.Context, now time.Time) (string, error) {

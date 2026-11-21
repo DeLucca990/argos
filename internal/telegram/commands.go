@@ -66,7 +66,8 @@ func (b *Bot) helpText(telegramID int64) string {
 		"• ou uma linha de texto: <i>almoço 35,90 no pix</i>\n\n" +
 		"Eu salvo na hora e mostro o que li. Para corrigir, responda ao cartão: <i>foi 45,90 no crédito</i>.\n\n" +
 		"E pergunte o que quiser sobre os gastos: <i>quanto gastei com mercado em setembro?</i>, " +
-		"<i>qual foi meu maior gasto da semana?</i>\n\n")
+		"<i>qual foi meu maior gasto da semana?</i> Um pedido de resumo — <i>resumo dos gastos dos últimos 15 dias</i> — " +
+		"vem com um gráfico, assim como /semana, /mes e /resumo.\n\n")
 	if banking {
 		s.WriteString("Ou conecte seus bancos com /conectar, e os gastos chegam sozinhos pelo Open Finance.\n\n")
 	}

@@ -29,6 +29,7 @@ type Bot struct {
 	ownBanks  map[int64]bankAPI
 	tg        *bot.Bot
 	notify    func(ctx context.Context, chatID int64, text string) error
+	sendPhoto func(ctx context.Context, chatID int64, p picture) error
 
 	slots chan struct{}
 	now   func() time.Time
@@ -73,7 +74,7 @@ func New(cfg Config, st *store.Store) (*Bot, error) {
 		return nil, fmt.Errorf("telegram: %w (is %s the token @BotFather gave?)", err, TokenEnv)
 	}
 	b.tg = tg
-	b.notify = b.deliver
+	b.notify, b.sendPhoto = b.deliver, b.deliverPhoto
 	return b, nil
 }
 

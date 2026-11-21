@@ -50,7 +50,7 @@ func TestDayAndPeriodReports(t *testing.T) {
 		t.Errorf("/hoje counted a pending expense or someone else's:\n%s", day)
 	}
 
-	week, _ := b.summaryText(ctx, user.ID, weekPeriod(fixed))
+	week, _, _ := b.summaryText(ctx, user.ID, weekPeriod(fixed))
 	for _, want := range []string{"Semana de 19/10 a 25/10", "R$ 112,38</b> em 3 gastos", "🛒 Mercado — R$ 97,38 (87%) · 2",
 		"🍽️ Restaurante — R$ 15,00 (13%) · 1"} {
 		if !strings.Contains(week, want) {
@@ -59,14 +59,14 @@ func TestDayAndPeriodReports(t *testing.T) {
 	}
 
 	october, _ := parseMonth("", fixed)
-	month, _ := b.summaryText(ctx, user.ID, october)
+	month, _, _ := b.summaryText(ctx, user.ID, october)
 	if !strings.Contains(month, "Outubro de 2026") || !strings.Contains(month, "R$ 312,38</b> em 4 gastos") ||
 		strings.Index(month, "Combustível") > strings.Index(month, "Mercado") {
 		t.Errorf("/mes:\n%s", month)
 	}
 
 	empty, _ := parseMonth("2026-08", fixed)
-	if text, _ := b.summaryText(ctx, user.ID, empty); !strings.Contains(text, "Nenhum gasto registrado") {
+	if text, _, _ := b.summaryText(ctx, user.ID, empty); !strings.Contains(text, "Nenhum gasto registrado") {
 		t.Errorf("an empty month:\n%s", text)
 	}
 }

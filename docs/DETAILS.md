@@ -6,8 +6,7 @@ of text — and it extracts the purchase with Claude and stores it in SQLite.
 **Status: phase 5, under way.** It reads receipts, records them as they arrive, imports from
 banks through Open Finance, takes corrections in plain words, and answers what was spent — in
 commands, by day, week and month, and in questions asked in Portuguese. It backs itself up daily,
-reports its health, keeps to a daily budget if given one, and comes with an evaluation to choose
-its model by.
+reports its health, and keeps to a daily budget if given one.
 
 ## Running it
 
@@ -495,7 +494,8 @@ in October, `/mes dezembro` is December 2025.
 ```
 
 Every report counts saved expenses only — never a discarded one — and only the sender's: each
-person in `TELEGRAM_ALLOWED_USER_IDS` sees what they sent.
+person in `TELEGRAM_ALLOWED_USER_IDS` sees what they sent. `/semana`, `/mes` and `/resumo` are followed by a
+[chart](#charts) when there is something to draw.
 
 **The CSV** is made for a spreadsheet in Portuguese: `;` between columns, a decimal comma
 (`87,40`), dates as `20/10/2026`, and a byte-order mark so Excel reads the accents. One row per
@@ -534,8 +534,44 @@ twice, and a bot that was down on the 1st sends it when it comes back, through t
 that it waits for the next month. A month with no expenses sends nothing. A person who blocked
 the bot is recorded as done rather than retried for a week.
 
+The digest is followed by its [pace chart](#charts): the month's running total, day by day,
+against the month before. A chart that fails to draw or to send is logged and does not hold the
+digest back.
+
 `/resumo` shows the same at any time. For the month under way it reads *Outubro de 2026, até o
 dia 20*, and compares with the same days of the month before rather than with the whole of it.
+
+### Charts
+
+Summaries come with a picture of them, drawn by the bot itself — a PNG sent as a photo — while
+the text keeps the exact figures. There are three kinds:
+
+- **Bars**, largest first, for what a period's money went on: by category after `/semana` and
+  `/mes`, or by merchant, payment method or account when a question asks. Each bar carries its
+  amount and share; past ten, the rest are folded into one grey *Demais (n)*.
+- **Columns**, in time order, for how spending went: by day, week or month, when a question asks.
+  A column that covers only part of its month or week — the one under way, or the one in which
+  the first expense was recorded — is lighter, and a footnote says which days it holds. Months
+  before the first expense are left out rather than drawn as nothing spent.
+- **Pace**, a line of the running total day by day, in blue, against the period before in grey:
+  the month before for a month, or for part of one from the 1st; the same number of days just
+  before, otherwise. It is the chart after `/resumo` and after the digest. The legend gives each
+  line's total; the dot is where the period stands today.
+
+**In a question**, Claude decides: asked for a summary, an overview, a comparison or how
+spending evolved — *faça um resumo dos gastos dos últimos 15 dias*, *como foram meus gastos mês
+a mês este ano?*, *estou gastando mais rápido que no mês passado?* — it draws one of the three
+for the period and the filters it took from the question, and the picture follows its answer.
+Asked for a single figure or a list, it draws nothing. [In plain words](#in-plain-words) below
+has how.
+
+A chart that fails to draw or to send is logged, and the text goes out without it. Charts are
+drawn in Go, with `golang.org/x/image` and the Go fonts built into the binary — no browser, no
+chart library, no service the figures are sent to — so the image stays static and
+any-architecture. They cost no model call, and they are drawn when asked, not kept. The
+background is light whatever the Telegram theme, since the bot cannot know it; the categories
+are written by name, without their emoji, since no pure-Go font renderer draws colour emoji;
+and the text of a chart that the font lacks is left out rather than drawn as boxes.
 
 ### In plain words
 
@@ -560,7 +596,7 @@ number in it is still a purchase — *almoço 35,90 no pix* — which is why *qu
 needs its question word or its `?` to be read as one. A single word with no number, *oi*, gets
 the help.
 
-**How it is answered.** Claude gets three tools and nothing else, all reading, none writing,
+**How it is answered.** Claude gets four tools and nothing else, all reading, none writing,
 each scoped to the asker's saved expenses:
 
 | Tool | Answers |
@@ -568,12 +604,18 @@ each scoped to the asker's saved expenses:
 | `spending_totals` | sums, overall or by category, merchant, payment method, day, week or month, with each group's share |
 | `list_expenses` | the expenses themselves, newest or largest first, up to 50 |
 | `search_items` | the item lines of receipts that listed them — *cerveja*, *gasolina* — with their sum |
+| `chart` | draws a [chart](#charts) — bars by category, merchant, payment method or account; columns by day, week or month; or the pace against the period before — sent below the answer, and returns the figures it drew |
 
 Each takes the same filters: a date range, a category, part of a merchant's name, a payment
 method, an account — *quanto gastei no Nubank em outubro?* — a minimum and a maximum. There is no free-form SQL: what Claude can ask the database is
-exactly these three questions, and someone else's expenses are not among the answers. Every
+exactly these four questions, and someone else's expenses are not among the answers. Every
 figure in a reply comes from a tool — the prompt forbids estimating one — and the merchant names
 and item lines it reads are treated as data, since they came off receipts.
+
+The prompt has Claude call `chart` once whenever the question asks for a summary, and only the
+last chart of an answer is sent. Claude chooses the kind, the filters and a title of up to 45
+characters with no amounts; every figure drawn comes from the database, never from the model.
+A chart with nothing to draw is an error Claude reads, and no picture is sent.
 
 **A conversation.** Follow-ups work — *e em agosto?*, *e no crédito?* — for 30 minutes after the
 last question; after that, or after a long one, it starts over. The history is kept whole, never
@@ -584,33 +626,6 @@ Questions count toward `ARGOS_DAILY_BUDGET_USD` like receipts, and `/cost` tells
 *Hoje: US$ 0,0854 · 2 leituras · 1 correção · 3 perguntas*. On `claude-opus-5-5` a question runs
 around two or three cents; `claude-haiku-5-5` answers the same for a fraction of a cent, and
 reads ambiguous follow-ups less well.
-
-## Choosing the model by your own receipts
-
-The model that reads best is a matter of your receipts, not of a benchmark, so the repo carries
-an evaluation to run on them. Put photos and PDFs in `testdata/receipts/` — ignored by git and
-by the Docker build, since they are yours — then:
-
-```sh
-make eval-init                       # writes a .json beside each with what the model read
-# correct every .json by hand: it is the answer key, and the model wrote it
-make eval                            # the configured model
-make eval MODEL=claude-sonnet-5-5    # or any other, and EFFORT=medium
-```
-
-```
-receipt   total  date  payment  category  merchant  cnpj  nfce  US$
-oxxo.jpg  ✓      ✓     ✗        ✓         ✓         ·     ·     0.0180
-
-oxxo.jpg: payment read "debito", expected "credito"
-
-claude-opus-5-5 at effort low: total 1/1 · date 1/1 · payment 0/1 · category 1/1 · merchant 1/1 — US$ 0.0180 for 1 receipt
-```
-
-The total is compared in cents, the merchant loosely — either name inside the other, ignoring
-case and punctuation — and the CNPJ and the NFC-e key only where the answer key has them (`·`
-otherwise). It runs on your machine with the `ANTHROPIC_API_KEY` in `.env`, and every receipt is
-a real, billed call: ten receipts on Opus 5.5 cost around US$ 0,40.
 
 ## Configuration
 
@@ -681,11 +696,11 @@ NFC-e access key, cannot be recorded twice unless the first record was discarded
 
 ```
 cmd/argos/           entrypoint: .env loading, the database, signal handling, backups; argos migrate and argos healthcheck
-cmd/eval/            make eval: reads your own receipts with a model and scores each field against what they say
 internal/dotenv/     reads a .env into the environment before the configuration is checked
 internal/receipt/    what a receipt is: amounts in cents, CNPJ/CPF/NFC-e checks, the warnings; imports nothing
 internal/extract/    Claude: the schema, the request, images made readable, corrections, filing bank transactions
-internal/ask/        Claude answering questions: the conversation, and the three read-only tools it may call
+internal/ask/        Claude answering questions: the conversation, and the four read-only tools it may call
+internal/chart/      the charts: bars, columns and pace, from the database to a PNG; knows nothing of Telegram or Claude
 internal/cost/       what each model call cost, at list prices, fallbacks included
 internal/pluggy/     the Pluggy API: signing in, items, accounts and transactions
 internal/store/      SQLite — migrations, expenses, reports; knows nothing of Telegram or Claude

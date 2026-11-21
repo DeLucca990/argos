@@ -57,8 +57,9 @@ Then send the bot `/start`. On a Mac or Windows the data goes in a volume instea
 
 Send a receipt — a photo, an image or PDF file, or text such as *almoço 35,90 no pix* — and it
 is saved and answered with a card; reply to the card to correct it. Ask in plain words: *quanto
-gastei com mercado em setembro?* Add categories of your own with the ➕ at the bottom of
-`/categorias`. `/help` lists the commands.
+gastei com mercado em setembro?* — and a summary, *resumo dos gastos dos últimos 15 dias*, comes
+with a chart, as `/semana`, `/mes` and `/resumo` do. Add categories of your own with the ➕ at the
+bottom of `/categorias`. `/help` lists the commands.
 
 Or connect your banks through Open Finance, with [Pluggy](https://pluggy.ai), and the expenses
 come in on their own, once an hour or as often as `PLUGGY_SYNC_EVERY` says — receipts keep

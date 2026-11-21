@@ -3,12 +3,14 @@ package ask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 
+	"github.com/DeLucca990/argos/internal/chart"
 	"github.com/DeLucca990/argos/internal/receipt"
 	"github.com/DeLucca990/argos/internal/store"
 )
@@ -16,6 +18,7 @@ import (
 const (
 	defaultRows = 20
 	maxRows     = 50
+	maxTitle    = 45
 )
 
 var paymentLabels = map[string]string{
@@ -28,6 +31,7 @@ type tools struct {
 	cats         map[string]store.Category
 	params       []anthropic.BetaToolUnionParam
 	categoryList string
+	chart        *chart.Chart
 }
 
 type filterArgs struct {
@@ -82,6 +86,10 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 	for _, g := range store.Groupings() {
 		groupBy = append(groupBy, g)
 	}
+	shapes := make([]any, 0)
+	for _, g := range chart.Shapes() {
+		shapes = append(shapes, g)
+	}
 
 	t.params = []anthropic.BetaToolUnionParam{
 		tool("list_expenses", "Lists individual expenses matching the filters: date, time, merchant, category, "+
@@ -103,6 +111,20 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 			filters(map[string]any{
 				"group_by": map[string]any{"type": "string", "enum": groupBy, "description": "none for a single total"},
 			}), []string{"group_by"}),
+		tool("chart", "Draws the expenses matching the filters as a chart, which is sent as an image right below your answer. "+
+			"Call it whenever the person asks for a summary, an overview, a breakdown, a comparison or the evolution of their "+
+			"spending; never for a single figure or a list of expenses. The result carries the figures drawn. Only the last "+
+			"chart of an answer is sent.",
+			filters(map[string]any{
+				"group_by": map[string]any{"type": "string", "enum": shapes, "description": "category, merchant, payment_method " +
+					"or account: bars, largest first, for what a period's spending went on. day, week or month: columns in time " +
+					"order, at most 62, for how it went over time. pace: the running total day by day against the period of the " +
+					"same length just before it — the month before, for a period from the 1st within one month — for whether they " +
+					"spend faster or slower; " +
+					"2 to 92 days, and from is required"},
+				"title": str(fmt.Sprintf("what the chart shows, in Brazilian Portuguese, at most %d characters and with no "+
+					`amounts: "Gastos dos últimos 15 dias", "Delivery por mês em 2026"`, maxTitle)),
+			}), []string{"group_by", "title"}),
 	}
 	return t
 }
@@ -122,6 +144,7 @@ func (t *tools) call(ctx context.Context, name string, input []byte, userID int6
 		GroupBy string `json:"group_by"`
 		OrderBy string `json:"order_by"`
 		Text    string `json:"text"`
+		Title   string `json:"title"`
 		Limit   int    `json:"limit"`
 	}
 	if err := json.Unmarshal(input, &args); err != nil {
@@ -148,6 +171,8 @@ func (t *tools) call(ctx context.Context, name string, input []byte, userID int6
 			return "", fmt.Errorf("text is required: what the item line contains")
 		}
 		out, err = t.items(ctx, userID, strings.TrimSpace(args.Text), f, limit)
+	case "chart":
+		out, err = t.draw(ctx, userID, f, args.GroupBy, args.Title, now)
 	default:
 		return "", fmt.Errorf("there is no tool %q", name)
 	}
@@ -239,6 +264,38 @@ func (t *tools) totals(ctx context.Context, userID int64, f store.Filter, groupB
 			out.Groups = append(out.Groups, groupOut{Key: key, Total: receipt.FormatBRL(g.TotalCents), Count: g.Count,
 				Share: fmt.Sprintf("%d%%", (g.TotalCents*100+total/2)/max(total, 1))})
 		}
+	}
+	return out, nil
+}
+
+func (t *tools) draw(ctx context.Context, userID int64, f store.Filter, groupBy, title string, now time.Time) (any, error) {
+	if r := []rune(strings.TrimSpace(title)); len(r) > maxTitle {
+		title = strings.TrimSpace(string(r[:maxTitle]))
+	}
+	c, err := chart.Spending(ctx, t.store, userID, chart.Request{Filter: f, GroupBy: groupBy, Title: title}, now)
+	if errors.Is(err, chart.ErrEmpty) {
+		return nil, fmt.Errorf("nothing to draw: no expenses of theirs in %s match; no chart is sent", period(f))
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.chart = &c
+
+	type pointOut struct {
+		Key     string `json:"key"`
+		Total   string `json:"total"`
+		Count   int    `json:"count,omitempty"`
+		Partial bool   `json:"partial,omitempty"`
+	}
+	out := struct {
+		Sent   string     `json:"sent"`
+		Period string     `json:"period"`
+		Total  string     `json:"total"`
+		Count  int        `json:"count"`
+		Points []pointOut `json:"points"`
+	}{Sent: "below your answer, titled " + c.Title, Period: period(f), Total: receipt.FormatBRL(c.TotalCents), Count: c.Count}
+	for _, p := range c.Points {
+		out.Points = append(out.Points, pointOut{Key: p.Key, Total: receipt.FormatBRL(p.Cents), Count: p.Count, Partial: p.Partial})
 	}
 	return out, nil
 }

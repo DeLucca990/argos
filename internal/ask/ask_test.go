@@ -153,11 +153,51 @@ func TestAskRunsTheToolsAndAnswers(t *testing.T) {
 		t.Errorf("the question went as %q", question)
 	}
 	system := first["system"].([]any)[0].(map[string]any)["text"].(string)
-	if !strings.Contains(system, "mercado = Mercado") || len(first["tools"].([]any)) != 3 || first["fallbacks"] != "default" {
+	if !strings.Contains(system, "mercado = Mercado") || len(first["tools"].([]any)) != 4 || first["fallbacks"] != "default" {
 		t.Errorf("system, tools or fallbacks: %v tools, fallbacks %v", len(first["tools"].([]any)), first["fallbacks"])
 	}
 	if first["cache_control"] == nil {
 		t.Error("the request is not cached")
+	}
+}
+
+func TestAskDrawsAChart(t *testing.T) {
+	long := strings.Repeat("Gastos de setembro ", 5)
+	a, api, user := setup(t,
+		toolUse("chart", `{"group_by":"pace","from":"2026-08-01","to":"2026-08-31","title":"Agosto"}`),
+		toolUse("chart", `{"group_by":"category","from":"2026-09-01","to":"2026-09-30","title":"`+long+`"}`),
+		text("Em setembro você gastou R$ 388,00, quase tudo no mercado."),
+	)
+	ans, err := a.Ask(ctx, user, "faça um resumo de setembro", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result, isError := lastToolResult(t, api.requests[1]); !isError || !strings.Contains(result, "nothing to draw") {
+		t.Errorf("a period with no expenses: %v, %s", isError, result)
+	}
+	result, isError := lastToolResult(t, api.requests[2])
+	for _, want := range []string{`"total":"R$ 388,00"`, `"count":3`, `{"key":"Mercado","total":"R$ 370,00","count":2}`, `"sent":"below your answer`} {
+		if isError || !strings.Contains(result, want) {
+			t.Errorf("the chart's result lacks %s:\n%s", want, result)
+		}
+	}
+	if strings.Contains(result, "999") {
+		t.Errorf("someone else's expense was drawn: %s", result)
+	}
+	if ans.Chart == nil || len(ans.Chart.PNG) == 0 || ans.Chart.TotalCents != 38800 {
+		t.Fatal("no chart, or the wrong one")
+	}
+	if title := ans.Chart.Title; len([]rune(title)) > maxTitle || !strings.HasPrefix(title, "Gastos de setembro Gastos") {
+		t.Errorf("a long title: %q", title)
+	}
+	if system := api.requests[0]["system"].([]any)[0].(map[string]any)["text"].(string); !strings.Contains(system, "call chart once") {
+		t.Error("the prompt does not ask for a chart with a summary")
+	}
+
+	a2, _, user2 := setup(t, text("Em setembro você gastou R$ 388,00."))
+	if ans, err := a2.Ask(ctx, user2, "quanto gastei em setembro?", now); err != nil || ans.Chart != nil {
+		t.Errorf("an answer with no chart: %+v, %v", ans.Chart, err)
 	}
 }
 
