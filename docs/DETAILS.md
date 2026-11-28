@@ -607,7 +607,8 @@ each scoped to the asker's saved expenses:
 | `search_items` | the item lines of receipts that listed them — *cerveja*, *gasolina* — with their sum |
 | `chart` | draws a [chart](#charts) — bars by category, merchant, payment method or account; columns by day, week or month; or the pace against the period before — sent below the answer, and returns the figures it drew |
 
-Each takes the same filters: a date range, a category, part of a merchant's name, a payment
+Each takes the same filters: a date range, one category or several together — *alimentação por conta* takes
+Restaurante, Mercado and Delivery in one go — part of a merchant's name, a payment
 method, an account — *quanto gastei no Nubank em outubro?* — a minimum and a maximum. There is no free-form SQL: what Claude can ask the database is
 exactly these four questions, and someone else's expenses are not among the answers. Every
 figure in a reply comes from a tool — the prompt forbids estimating one — and the merchant names

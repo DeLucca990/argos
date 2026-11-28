@@ -187,7 +187,7 @@ func TestSaveCategory(t *testing.T) {
 	if e, err := s.SetCategory(ctx, me, id, "academia"); err != nil || e.Category != "academia" {
 		t.Errorf("moving to their own academia: %+v, %v", e, err)
 	}
-	f := Filter{From: day("2026-10-01"), To: day("2026-11-01"), Category: "academia"}
+	f := Filter{From: day("2026-10-01"), To: day("2026-11-01"), Categories: []string{"academia"}}
 	if _, err := s.Confirm(ctx, me, id); err != nil && !errors.Is(err, ErrNotPending) {
 		t.Fatal(err)
 	}

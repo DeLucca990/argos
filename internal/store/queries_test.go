@@ -83,9 +83,13 @@ func TestTotals(t *testing.T) {
 		t.Errorf("a %% in the filter is a percent sign, not a wildcard: %s", groups(g))
 	}
 	f = september()
-	f.Category, f.MinCents = "mercado", 20000
+	f.Categories, f.MinCents = []string{"mercado"}, 20000
 	if g, _ := s.Totals(ctx, me, f, "none"); groups(g) != "=25000/1" {
 		t.Errorf("category and minimum: %s", groups(g))
+	}
+	f = Filter{From: day("2026-09-01"), To: day("2026-11-01"), Categories: []string{"mercado", "restaurante"}}
+	if g, _ := s.Totals(ctx, me, f, "category"); groups(g) != "Mercado=37000/2 Restaurante=1800/1" {
+		t.Errorf("several categories: %s", groups(g))
 	}
 	f = Filter{From: day("2026-01-01"), To: day("2027-01-01"), PaymentMethod: "credito", MaxCents: 20000}
 	if g, _ := s.Totals(ctx, me, f, "none"); groups(g) != "=20000/1" {

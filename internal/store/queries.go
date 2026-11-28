@@ -10,7 +10,7 @@ import (
 
 type Filter struct {
 	From, To      time.Time
-	Category      string
+	Categories    []string
 	Merchant      string
 	PaymentMethod string
 	Account       string
@@ -50,9 +50,13 @@ func Groupings() []string {
 func (f Filter) where(userID int64) (string, []any) {
 	clauses := []string{"e.user_id = ?", "e.status = 'confirmed'", "e.spent_on >= ?", "e.spent_on < ?"}
 	args := []any{userID, f.From.Format(dateLayout), f.To.Format(dateLayout)}
-	if f.Category != "" {
-		clauses = append(clauses, "e.category_id = (SELECT id FROM categories WHERE slug = ? AND "+visibleTo+")")
-		args = append(args, f.Category, userID)
+	if len(f.Categories) > 0 {
+		marks := strings.TrimSuffix(strings.Repeat("?, ", len(f.Categories)), ", ")
+		clauses = append(clauses, "e.category_id IN (SELECT id FROM categories WHERE slug IN ("+marks+") AND "+visibleTo+")")
+		for _, c := range f.Categories {
+			args = append(args, c)
+		}
+		args = append(args, userID)
 	}
 	if f.Merchant != "" {
 		pattern := like(f.Merchant)

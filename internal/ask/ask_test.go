@@ -283,8 +283,8 @@ func TestToolsByAccount(t *testing.T) {
 
 func TestToolsTakeTheUsersOwnCategories(t *testing.T) {
 	a, api, user := setup(t,
-		toolUse("spending_totals", `{"group_by":"none","category":"academia"}`),
-		toolUse("spending_totals", `{"group_by":"none","category":"cassino"}`),
+		toolUse("spending_totals", `{"group_by":"none","categories":["academia"]}`),
+		toolUse("spending_totals", `{"group_by":"none","categories":["mercado","cassino"]}`),
 		text("ok"),
 	)
 	if _, err := a.Ask(ctx, user, "quanto gastei com academia?", now); err != nil {
@@ -299,7 +299,7 @@ func TestToolsTakeTheUsersOwnCategories(t *testing.T) {
 	var enum []any
 	for _, tl := range first["tools"].([]any) {
 		props := tl.(map[string]any)["input_schema"].(map[string]any)["properties"].(map[string]any)
-		enum = props["category"].(map[string]any)["enum"].([]any)
+		enum = props["categories"].(map[string]any)["items"].(map[string]any)["enum"].([]any)
 	}
 	if !slices.Contains(enum, any("academia")) || slices.Contains(enum, any("cassino")) || len(enum) != 17 {
 		t.Errorf("the category enum: %v", enum)

@@ -128,13 +128,13 @@ func TestTimeline(t *testing.T) {
 		t.Errorf("days, with the empty ones: %d points, %v", len(c.Points), err)
 	}
 
-	c, err = Spending(ctx, st, user, Request{Filter: store.Filter{From: day("2026-10-12"), To: day("2026-11-21"), Category: "combustivel"},
+	c, err = Spending(ctx, st, user, Request{Filter: store.Filter{From: day("2026-10-12"), To: day("2026-11-21"), Categories: []string{"combustivel"}},
 		GroupBy: "week"}, now)
 	if err != nil || len(c.Points) != 6 || c.Points[1] != (Point{Key: "2026-10-19", Cents: 20000, Count: 1}) || !c.Points[5].Partial {
 		t.Errorf("weeks of a category: %+v, %v", c.Points, err)
 	}
 
-	if _, err := Spending(ctx, st, user, Request{Filter: store.Filter{From: day("2026-11-10"), To: day("2026-11-21"), Category: "mercado"},
+	if _, err := Spending(ctx, st, user, Request{Filter: store.Filter{From: day("2026-11-10"), To: day("2026-11-21"), Categories: []string{"mercado"}},
 		GroupBy: "day"}, now); !errors.Is(err, ErrEmpty) {
 		t.Errorf("nothing in the period: %v", err)
 	}

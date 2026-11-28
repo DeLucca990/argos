@@ -81,7 +81,7 @@ func (b *Bot) categoryMenu(ctx context.Context, userID int64) (reply, error) {
 
 func (b *Bot) categoryDetail(ctx context.Context, userID int64, c store.Category) (reply, error) {
 	far := time.Date(9999, 1, 1, 0, 0, 0, 0, time.Local)
-	groups, err := b.store.Totals(ctx, userID, store.Filter{To: far, Category: c.Slug}, "none")
+	groups, err := b.store.Totals(ctx, userID, store.Filter{To: far, Categories: []string{c.Slug}}, "none")
 	if err != nil {
 		return reply{}, err
 	}

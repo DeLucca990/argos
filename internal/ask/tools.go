@@ -35,14 +35,14 @@ type tools struct {
 }
 
 type filterArgs struct {
-	From          string `json:"from"`
-	To            string `json:"to"`
-	Category      string `json:"category"`
-	Merchant      string `json:"merchant"`
-	PaymentMethod string `json:"payment_method"`
-	Account       string `json:"account"`
-	MinTotal      string `json:"min_total"`
-	MaxTotal      string `json:"max_total"`
+	From          string   `json:"from"`
+	To            string   `json:"to"`
+	Categories    []string `json:"categories"`
+	Merchant      string   `json:"merchant"`
+	PaymentMethod string   `json:"payment_method"`
+	Account       string   `json:"account"`
+	MinTotal      string   `json:"min_total"`
+	MaxTotal      string   `json:"max_total"`
 }
 
 func newTools(st *store.Store, cats []store.Category) *tools {
@@ -68,9 +68,10 @@ func newTools(st *store.Store, cats []store.Category) *tools {
 	}
 	filters := func(extra map[string]any) map[string]any {
 		props := map[string]any{
-			"from":           str("first day, YYYY-MM-DD, included; the first expense ever when omitted"),
-			"to":             str("last day, YYYY-MM-DD, included; today when omitted"),
-			"category":       map[string]any{"type": "string", "enum": slugs, "description": "only this category"},
+			"from": str("first day, YYYY-MM-DD, included; the first expense ever when omitted"),
+			"to":   str("last day, YYYY-MM-DD, included; today when omitted"),
+			"categories": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": slugs},
+				"description": "only these categories: one, or several taken together — restaurante, mercado, delivery and any of their own that fit, for all of their food"},
 			"merchant":       str("only expenses whose merchant or description contains this, ignoring case"),
 			"payment_method": map[string]any{"type": "string", "enum": []any{"pix", "credito", "debito", "dinheiro", "boleto", "vale", "outro"}},
 			"account":        str("only expenses paid from this bank, card or wallet — Nubank, Inter, Caju — ignoring case"),
@@ -204,11 +205,11 @@ func (t *tools) filter(a filterArgs, now time.Time) (store.Filter, error) {
 		}
 		f.To = d.AddDate(0, 0, 1)
 	}
-	if a.Category != "" {
-		if _, ok := t.cats[a.Category]; !ok {
-			return f, fmt.Errorf("there is no category %q", a.Category)
+	for _, c := range a.Categories {
+		if _, ok := t.cats[c]; !ok {
+			return f, fmt.Errorf("there is no category %q", c)
 		}
-		f.Category = a.Category
+		f.Categories = append(f.Categories, c)
 	}
 	for _, m := range []struct {
 		raw  string
