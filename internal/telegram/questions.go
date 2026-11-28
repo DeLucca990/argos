@@ -14,7 +14,10 @@ import (
 	"github.com/DeLucca990/argos/internal/store"
 )
 
-const maxAnswerRunes = 3500
+const (
+	maxAnswerRunes = 3500
+	maxQuotedRunes = 1500
+)
 
 type asker interface {
 	Ask(ctx context.Context, userID int64, question string, now time.Time) (ask.Answer, error)
@@ -44,9 +47,37 @@ func isQuestion(text string) bool {
 }
 
 func (b *Bot) onQuestion(ctx context.Context, msg *models.Message) {
+	text := msg.Text
+	if b.repliesToBot(msg) {
+		text = withQuote(msg)
+	}
 	b.process(ctx, msg, "🤔 Pensando…", func(ctx context.Context) reply {
-		return b.question(ctx, userFrom(ctx), msg.Text)
+		return b.question(ctx, userFrom(ctx), text)
 	})
+}
+
+func (b *Bot) repliesToBot(msg *models.Message) bool {
+	r := msg.ReplyToMessage
+	return r != nil && msg.Text != "" && r.From != nil && r.From.ID == b.tg.ID()
+}
+
+func withQuote(msg *models.Message) string {
+	r := msg.ReplyToMessage
+	quoted := nonEmpty(r.Text, r.Caption)
+	if msg.Quote != nil && msg.Quote.Text != "" {
+		quoted = msg.Quote.Text
+	}
+	if i := strings.LastIndex(quoted, "\n\n≈ US$ "); i >= 0 {
+		quoted = quoted[:i]
+	}
+	quoted = strings.TrimSpace(quoted)
+	if quoted == "" {
+		return msg.Text
+	}
+	if q := []rune(quoted); len(q) > maxQuotedRunes {
+		quoted = string(q[:maxQuotedRunes]) + "…"
+	}
+	return "Em resposta a esta mensagem sua:\n«" + quoted + "»\n\n" + msg.Text
 }
 
 func (b *Bot) question(ctx context.Context, user store.User, text string) reply {

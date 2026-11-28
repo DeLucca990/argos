@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-telegram/bot/models"
+
 	"github.com/DeLucca990/argos/internal/ask"
 	"github.com/DeLucca990/argos/internal/cost"
 	"github.com/DeLucca990/argos/internal/store"
@@ -88,5 +90,27 @@ func TestQuestion(t *testing.T) {
 	asked := len(fa.asked)
 	if r := b.question(ctx, user, "quanto?"); !strings.Contains(r.text, "teto diário") || len(fa.asked) != asked {
 		t.Errorf("over the budget: %q, asked %d times", r.text, len(fa.asked)-asked)
+	}
+}
+
+func TestWithQuote(t *testing.T) {
+	answer := &models.Message{Text: "Se quiser, mando o gráfico de Mercado.\n\n≈ US$ 0,0269 · 14.155 tokens: 6 entrada, 902 saída"}
+	if got := withQuote(&models.Message{Text: "manda", ReplyToMessage: answer}); got !=
+		"Em resposta a esta mensagem sua:\n«Se quiser, mando o gráfico de Mercado.»\n\nmanda" {
+		t.Errorf("an answer: %q", got)
+	}
+
+	chart := &models.Message{Caption: "📊 Restaurante por conta"}
+	if got := withQuote(&models.Message{Text: "e o de mercado?", ReplyToMessage: chart}); !strings.Contains(got, "«📊 Restaurante por conta»") {
+		t.Errorf("a chart: %q", got)
+	}
+
+	part := &models.Message{Text: "manda", ReplyToMessage: answer, Quote: &models.TextQuote{Text: "gráfico de Mercado"}}
+	if got := withQuote(part); !strings.Contains(got, "«gráfico de Mercado»") {
+		t.Errorf("a quote: %q", got)
+	}
+
+	if got := withQuote(&models.Message{Text: "manda", ReplyToMessage: &models.Message{}}); got != "manda" {
+		t.Errorf("nothing to quote: %q", got)
 	}
 }

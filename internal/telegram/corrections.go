@@ -18,10 +18,10 @@ import (
 )
 
 func (b *Bot) cardFor(ctx context.Context, msg *models.Message) (int64, bool) {
-	r := msg.ReplyToMessage
-	if r == nil || msg.Text == "" || r.From == nil || r.From.ID != b.tg.ID() {
+	if !b.repliesToBot(msg) {
 		return 0, false
 	}
+	r := msg.ReplyToMessage
 	id, err := b.store.CardExpense(ctx, msg.Chat.ID, r.ID)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {

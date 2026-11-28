@@ -594,7 +594,8 @@ faça, me dá, gere, calcule and a few more; or any text of more than one word w
 since that cannot be a purchase — *faça um resumo de todos os gastos*. Anything else with a
 number in it is still a purchase — *almoço 35,90 no pix* — which is why *quanto gastei em 2026?*
 needs its question word or its `?` to be read as one. A single word with no number, *oi*, gets
-the help.
+the help — unless it replies to one of the bot's messages that is not a card: then any text
+without a number is a question, *manda* or *sim* included.
 
 **How it is answered.** Claude gets four tools and nothing else, all reading, none writing,
 each scoped to the asker's saved expenses:
@@ -620,7 +621,10 @@ A chart with nothing to draw is an error Claude reads, and no picture is sent.
 **A conversation.** Follow-ups work — *e em agosto?*, *e no crédito?* — for 30 minutes after the
 last question; after that, or after a long one, it starts over. The history is kept whole, never
 trimmed, so the prompt cache holds and the earlier turns stay valid. One question per person at
-a time.
+a time. A question sent as a reply to an answer, a chart or any other message of the bot's that
+is not a card goes to Claude with that message quoted — or just the part you quoted in Telegram —
+up to 1,500 characters and without its cost line, so *manda* after *Se quiser, mando o gráfico
+de Mercado* works even after the 30 minutes or a restart.
 
 Questions count toward `ARGOS_DAILY_BUDGET_USD` like receipts, and `/cost` tells them apart:
 *Hoje: US$ 0,0854 · 2 leituras · 1 correção · 3 perguntas*. On `claude-opus-5-5` a question runs

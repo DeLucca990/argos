@@ -245,7 +245,7 @@ func (b *Bot) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 		b.onCorrection(ctx, msg, id)
 		return
 	}
-	if isQuestion(msg.Text) {
+	if isQuestion(msg.Text) || (b.repliesToBot(msg) && !hasDigit(msg.Text)) {
 		b.onQuestion(ctx, msg)
 		return
 	}
