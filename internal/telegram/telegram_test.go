@@ -41,7 +41,7 @@ func TestRememberSavesTheSender(t *testing.T) {
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
 	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, ModelEnv, EffortEnv, anthropicKeyEnv, anthropicTokenEnv,
-		PluggyIDEnv, PluggySecretEnv, BackupEveryEnv, BankEveryEnv} {
+		PluggyIDEnv, PluggySecretEnv, BackupEveryEnv, BankEveryEnv, DigestAtEnv, WeeklyDigestAtEnv} {
 		t.Setenv(k, kv[k])
 	}
 }
@@ -180,6 +180,31 @@ func TestConfigIntervals(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), BackupEveryEnv) || !strings.Contains(err.Error(), BankEveryEnv) {
 			t.Errorf("%q was accepted: %v", raw, err)
 		}
+	}
+}
+
+func TestConfigDigestTimes(t *testing.T) {
+	base := map[string]string{TokenEnv: "123:abc", AllowedUsersEnv: "42", DataDirEnv: t.TempDir(), anthropicKeyEnv: "x"}
+	setEnv(t, base)
+	cfg, err := LoadConfig()
+	if err != nil || cfg.DigestAt == nil || *cfg.DigestAt != (DailyAt{Hour: 9}) || cfg.WeeklyDigestAt == nil || *cfg.WeeklyDigestAt != (DailyAt{Hour: 20}) {
+		t.Fatalf("defaults: %v and %v, %v", cfg.DigestAt, cfg.WeeklyDigestAt, err)
+	}
+
+	base[DigestAtEnv], base[WeeklyDigestAtEnv] = "off", "21:30"
+	setEnv(t, base)
+	if cfg, err := LoadConfig(); err != nil || cfg.DigestAt != nil || cfg.WeeklyDigestAt == nil || *cfg.WeeklyDigestAt != (DailyAt{Hour: 21, Minute: 30}) {
+		t.Errorf("monthly off, weekly at 21:30: %v and %v, %v", cfg.DigestAt, cfg.WeeklyDigestAt, err)
+	}
+	base[WeeklyDigestAtEnv] = "OFF"
+	setEnv(t, base)
+	if cfg, err := LoadConfig(); err != nil || cfg.WeeklyDigestAt != nil {
+		t.Errorf("weekly off: %v, %v", cfg.WeeklyDigestAt, err)
+	}
+	base[WeeklyDigestAtEnv] = "domingo"
+	setEnv(t, base)
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), `ARGOS_WEEKLY_DIGEST_AT="domingo": must be a time of day such as 20:00, or off`) {
+		t.Errorf("a day for a time: %v", err)
 	}
 }
 

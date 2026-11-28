@@ -13,50 +13,53 @@ import (
 )
 
 const (
-	TokenEnv        = "TELEGRAM_BOT_TOKEN"
-	AllowedUsersEnv = "TELEGRAM_ALLOWED_USER_IDS"
-	DataDirEnv      = "ARGOS_DATA_DIR"
-	ModelEnv        = "ARGOS_MODEL"
-	EffortEnv       = "ARGOS_EFFORT"
-	DailyBudgetEnv  = "ARGOS_DAILY_BUDGET_USD"
-	BackupKeepEnv   = "ARGOS_BACKUP_KEEP"
-	BackupEveryEnv  = "ARGOS_BACKUP_EVERY"
-	DigestAtEnv     = "ARGOS_DIGEST_AT"
-	DeleteFilesEnv  = "ARGOS_DELETE_RECEIPTS"
-	PluggyIDEnv     = "PLUGGY_CLIENT_ID"
-	PluggySecretEnv = "PLUGGY_CLIENT_SECRET"
-	BankEveryEnv    = "PLUGGY_SYNC_EVERY"
+	TokenEnv          = "TELEGRAM_BOT_TOKEN"
+	AllowedUsersEnv   = "TELEGRAM_ALLOWED_USER_IDS"
+	DataDirEnv        = "ARGOS_DATA_DIR"
+	ModelEnv          = "ARGOS_MODEL"
+	EffortEnv         = "ARGOS_EFFORT"
+	DailyBudgetEnv    = "ARGOS_DAILY_BUDGET_USD"
+	BackupKeepEnv     = "ARGOS_BACKUP_KEEP"
+	BackupEveryEnv    = "ARGOS_BACKUP_EVERY"
+	DigestAtEnv       = "ARGOS_DIGEST_AT"
+	WeeklyDigestAtEnv = "ARGOS_WEEKLY_DIGEST_AT"
+	DeleteFilesEnv    = "ARGOS_DELETE_RECEIPTS"
+	PluggyIDEnv       = "PLUGGY_CLIENT_ID"
+	PluggySecretEnv   = "PLUGGY_CLIENT_SECRET"
+	BankEveryEnv      = "PLUGGY_SYNC_EVERY"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
 )
 
 const (
-	defaultDataDir = "/data"
-	defaultModel   = "claude-opus-5-5"
-	defaultEffort  = "low"
-	defaultKeep    = 14
-	defaultDigest  = "09:00"
-	defaultBackup  = 24 * time.Hour
-	defaultBank    = time.Hour
+	defaultDataDir      = "/data"
+	defaultModel        = "claude-opus-5-5"
+	defaultEffort       = "low"
+	defaultKeep         = 14
+	defaultDigest       = "09:00"
+	defaultWeeklyDigest = "20:00"
+	defaultBackup       = 24 * time.Hour
+	defaultBank         = time.Hour
 )
 
 var efforts = []string{"low", "medium", "high", "xhigh", "max"}
 
 type Config struct {
-	Token        string
-	AllowedUsers map[int64]bool
-	DataDir      string
-	Model        string
-	Effort       string
-	DailyBudget  float64
-	BackupKeep   int
-	BackupEvery  time.Duration
-	BankEvery    time.Duration
-	DigestAt     *DailyAt
-	DeleteFiles  bool
-	Pluggy       PluggyCredentials
-	PluggyUsers  map[int64]PluggyCredentials
+	Token          string
+	AllowedUsers   map[int64]bool
+	DataDir        string
+	Model          string
+	Effort         string
+	DailyBudget    float64
+	BackupKeep     int
+	BackupEvery    time.Duration
+	BankEvery      time.Duration
+	DigestAt       *DailyAt
+	WeeklyDigestAt *DailyAt
+	DeleteFiles    bool
+	Pluggy         PluggyCredentials
+	PluggyUsers    map[int64]PluggyCredentials
 }
 
 type PluggyCredentials struct{ ID, Secret string }
@@ -154,14 +157,8 @@ func LoadConfig() (Config, error) {
 	cfg.PluggyUsers, pluggyProblems = pluggyUsers(os.Environ(), users)
 	problems = append(problems, pluggyProblems...)
 
-	if raw := strings.ToLower(envOr(DigestAtEnv, defaultDigest)); raw != "off" {
-		t, err := time.Parse("15:04", raw)
-		if err != nil {
-			problems = append(problems, fmt.Sprintf("%s=%q: must be a time of day such as 09:00, or off", DigestAtEnv, raw))
-		} else {
-			cfg.DigestAt = &DailyAt{Hour: t.Hour(), Minute: t.Minute()}
-		}
-	}
+	cfg.DigestAt = timeOfDay(DigestAtEnv, defaultDigest, &problems)
+	cfg.WeeklyDigestAt = timeOfDay(WeeklyDigestAtEnv, defaultWeeklyDigest, &problems)
 
 	if len(problems) > 0 {
 		return Config{}, fmt.Errorf("configuration:\n  - %s", strings.Join(problems, "\n  - "))
@@ -257,6 +254,19 @@ func pluggyUsers(environ []string, allowed map[int64]bool) (map[int64]PluggyCred
 }
 
 func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+
+func timeOfDay(key, fallback string, problems *[]string) *DailyAt {
+	raw := strings.ToLower(envOr(key, fallback))
+	if raw == "off" {
+		return nil
+	}
+	t, err := time.Parse("15:04", raw)
+	if err != nil {
+		*problems = append(*problems, fmt.Sprintf("%s=%q: must be a time of day such as %s, or off", key, raw, fallback))
+		return nil
+	}
+	return &DailyAt{Hour: t.Hour(), Minute: t.Minute()}
+}
 
 func envOr(key, fallback string) string {
 	if v := env(key); v != "" {

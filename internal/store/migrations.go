@@ -336,4 +336,20 @@ CREATE TABLE bank_accounts (
     updated_at TEXT NOT NULL
 );
 `},
+	{name: "0010_digest_kinds", rebuild: true, sql: `
+CREATE TABLE new_digests (
+    user_id INTEGER NOT NULL REFERENCES users (id),
+    kind    TEXT NOT NULL CHECK (kind IN ('month', 'week')),
+    period  TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, kind, period),
+    CHECK (kind = 'month' AND period GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+        OR kind = 'week' AND period GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]')
+);
+
+INSERT INTO new_digests (user_id, kind, period, sent_at) SELECT user_id, 'month', month, sent_at FROM digests;
+
+DROP TABLE digests;
+ALTER TABLE new_digests RENAME TO digests;
+`},
 }

@@ -90,9 +90,16 @@ func (b *Bot) Run(ctx context.Context) {
 	go b.heartbeat(ctx)
 	if b.cfg.DigestAt != nil {
 		log.Printf("monthly digest on the 1st at %s, or on the next start within %d days", b.cfg.DigestAt, digestCatchUpDays)
-		go b.runDigests(ctx)
 	} else {
 		log.Printf("monthly digest off (%s=off)", DigestAtEnv)
+	}
+	if b.cfg.WeeklyDigestAt != nil {
+		log.Printf("weekly digest on Sundays at %s, or on the next start within %s", b.cfg.WeeklyDigestAt, weeklyCatchUp)
+	} else {
+		log.Printf("weekly digest off (%s=off)", WeeklyDigestAtEnv)
+	}
+	if b.cfg.DigestAt != nil || b.cfg.WeeklyDigestAt != nil {
+		go b.runDigests(ctx)
 	}
 	if b.banking() {
 		everyone := "nobody else"

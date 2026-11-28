@@ -529,7 +529,7 @@ Crédito R$ 250,00 · Débito R$ 120,00 · Pix R$ 18,00
 ```
 
 It is a template over the database, with no model in it, so it costs nothing. What was sent is a
-row in `digests`, per person and month, which makes a restart safe: nobody gets the same month
+row in `digests`, per person, kind and month, which makes a restart safe: nobody gets the same month
 twice, and a bot that was down on the 1st sends it when it comes back, through the 7th — after
 that it waits for the next month. A month with no expenses sends nothing. A person who blocked
 the bot is recorded as done rather than retried for a week.
@@ -540,6 +540,30 @@ digest back.
 
 `/resumo` shows the same at any time. For the month under way it reads *Outubro de 2026, até o
 dia 20*, and compares with the same days of the month before rather than with the whole of it.
+
+### The weekly digest
+
+On Sundays, at `ARGOS_WEEKLY_DIGEST_AT` (20:00 unless set; `off` for never), the same digest for
+the week from Monday to that Sunday, against the week before, followed by the week's pace chart:
+
+```
+📅 Resumo da semana de 05/10 a 11/10
+
+💰 R$ 250,00 em 2 gastos · média de R$ 35,71 por dia
+↗️ R$ 130,00 a mais que na semana anterior (+108%)
+
+Por categoria
+⛽ Combustível — R$ 200,00 (80%) · novo
+🛒 Mercado — R$ 50,00 (20%) · ↘️ −R$ 70,00
+…
+```
+
+It is recorded in `digests` too, as a week, by the date of its Monday, so each person gets a
+week once. A bot that was down on Sunday evening sends it when it comes back,
+for two days — through Tuesday at the same time; after that, that week is skipped. An empty
+week sends nothing. A purchase recorded on Sunday after the digest went out, or a bank
+transaction that comes in on Monday, is in the reports but not in that digest. Either digest can
+be off while the other runs.
 
 ### Charts
 
@@ -555,7 +579,7 @@ the text keeps the exact figures. There are three kinds:
   before the first expense are left out rather than drawn as nothing spent.
 - **Pace**, a line of the running total day by day, in blue, against the period before in grey:
   the month before for a month, or for part of one from the 1st; the same number of days just
-  before, otherwise. It is the chart after `/resumo` and after the digest. The legend gives each
+  before, otherwise. It is the chart after `/resumo` and after both digests. The legend gives each
   line's total; the dot is where the period stands today.
 
 **In a question**, Claude decides: asked for a summary, an overview, a comparison or how
@@ -645,6 +669,7 @@ reads ambiguous follow-ups less well.
 | `ARGOS_BACKUP_KEEP` | `14` | how many backups to keep in `/data/backups`; `0` turns them off |
 | `ARGOS_BACKUP_EVERY` | `1d` | how often to write one: whole minutes, at least `1m` — `30m`, `6h`, `1d`, `7d` |
 | `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
+| `ARGOS_WEEKLY_DIGEST_AT` | `20:00` | when the weekly digest goes out on Sundays, local time; `off` for never |
 | `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files: each is read from memory, and the ones kept before are deleted at startup |
 | `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` | — | a Pluggy application, to [import from banks](#importing-from-the-bank), for everyone without one of their own; neither for receipts only |
 | `PLUGGY_CLIENT_ID_<id>` / `PLUGGY_CLIENT_SECRET_<id>` | — | the Pluggy application of the person with that Telegram id, who must be in the allowlist |

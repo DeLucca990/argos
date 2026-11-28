@@ -42,10 +42,14 @@ func (b *Bot) postPicture(ctx context.Context, chatID int64, p *picture) {
 }
 
 func chartTitle(shape string, p period) string {
-	if shape == "pace" {
-		return "Ritmo de " + strings.ToLower(p.title[:1]) + p.title[1:]
+	if shape != "pace" {
+		return p.title
 	}
-	return p.title
+	title := strings.ToLower(p.title[:1]) + p.title[1:]
+	if strings.HasPrefix(title, "semana") {
+		return "Ritmo da " + title
+	}
+	return "Ritmo de " + title
 }
 
 func (b *Bot) periodChart(ctx context.Context, userID int64, shape string, p period) (picture, error) {

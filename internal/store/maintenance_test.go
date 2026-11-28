@@ -170,27 +170,73 @@ func TestScheduledBackupAfterDailyOnes(t *testing.T) {
 
 func TestDigestsAndUsers(t *testing.T) {
 	s := open(t)
-	if sent, err := s.DigestSent(ctx, me, "2026-09"); err != nil || sent {
+	if sent, err := s.DigestSent(ctx, me, MonthDigest, "2026-09"); err != nil || sent {
 		t.Errorf("not sent yet: %v, %v", sent, err)
 	}
 	for range 2 {
-		if err := s.MarkDigestSent(ctx, me, "2026-09"); err != nil {
+		if err := s.MarkDigestSent(ctx, me, MonthDigest, "2026-09"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkDigestSent(ctx, me, WeekDigest, "2026-11-16"); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if sent, _ := s.DigestSent(ctx, me, "2026-09"); !sent {
-		t.Error("marked, but not sent")
+	for _, c := range []struct {
+		user   int64
+		kind   DigestKind
+		period string
+		want   bool
+	}{
+		{me, MonthDigest, "2026-09", true},
+		{me, WeekDigest, "2026-11-16", true},
+		{them, MonthDigest, "2026-09", false},
+		{them, WeekDigest, "2026-11-16", false},
+		{me, WeekDigest, "2026-11-23", false},
+		{me, MonthDigest, "2026-11", false},
+	} {
+		if sent, err := s.DigestSent(ctx, c.user, c.kind, c.period); err != nil || sent != c.want {
+			t.Errorf("user %d, %s %s: sent %v, %v", c.user, c.kind, c.period, sent, err)
+		}
 	}
-	if sent, _ := s.DigestSent(ctx, them, "2026-09"); sent {
-		t.Error("someone else's digest counted as sent")
-	}
-	if err := s.MarkDigestSent(ctx, me, "setembro"); err == nil {
-		t.Error("a month that is not YYYY-MM was accepted")
+	for _, bad := range []struct {
+		kind   DigestKind
+		period string
+	}{{MonthDigest, "setembro"}, {MonthDigest, "2026-11-16"}, {WeekDigest, "2026-11"}, {WeekDigest, "2026-W47"}, {"year", "2026"}} {
+		if err := s.MarkDigestSent(ctx, me, bad.kind, bad.period); err == nil {
+			t.Errorf("a %s digest for %q was accepted", bad.kind, bad.period)
+		}
 	}
 
 	users, err := s.Users(ctx)
 	if err != nil || len(users) != 2 || users[0].TelegramID != 4242 || users[1].TelegramID != 7777 {
 		t.Errorf("users: %+v, %v", users, err)
+	}
+}
+
+func TestDigestKindsKeepTheMonthsSent(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "argos.db")
+	old, err := openWith(file, migrations[:9])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.SaveUser(ctx, User{TelegramID: 4242}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.db.Exec(`INSERT INTO digests (user_id, month, sent_at) VALUES (1, '2026-09', '2026-10-01T09:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+
+	s, err := Open(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if sent, err := s.DigestSent(ctx, me, MonthDigest, "2026-09"); err != nil || !sent {
+		t.Errorf("a month sent before the migration: %v, %v", sent, err)
+	}
+	if sent, _ := s.DigestSent(ctx, me, WeekDigest, "2026-09"); sent {
+		t.Error("the month became a week")
 	}
 }
 

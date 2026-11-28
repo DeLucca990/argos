@@ -18,9 +18,24 @@ import (
 
 const (
 	digestCatchUpDays = 7
+	weeklyCatchUp     = 48 * time.Hour
 	digestTop         = 5
 	digestTick        = 10 * time.Minute
 )
+
+type digestRun struct {
+	name string
+	kind store.DigestKind
+	key  string
+	p    period
+	text func(ctx context.Context, userID int64) (string, int, error)
+}
+
+type digestSpan struct {
+	cur, prev      period
+	title, against string
+	days           int
+}
 
 func digestDue(now time.Time, at DailyAt) (period, bool) {
 	if now.Day() > digestCatchUpDays {
@@ -31,6 +46,18 @@ func digestDue(now time.Time, at DailyAt) (period, bool) {
 	}
 	first := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	return monthPeriod(first.AddDate(0, -1, 0)), true
+}
+
+func weeklyDue(now time.Time, at DailyAt) (period, bool) {
+	monday := startOfDay(now).AddDate(0, 0, -((int(now.Weekday()) + 6) % 7))
+	due := time.Date(monday.Year(), monday.Month(), monday.Day()+6, at.Hour, at.Minute, 0, 0, now.Location())
+	if now.Before(due) {
+		monday, due = monday.AddDate(0, 0, -7), due.AddDate(0, 0, -7)
+	}
+	if now.Sub(due) >= weeklyCatchUp {
+		return period{}, false
+	}
+	return weekPeriod(monday), true
 }
 
 func (b *Bot) runDigests(ctx context.Context) {
@@ -47,29 +74,42 @@ func (b *Bot) runDigests(ctx context.Context) {
 }
 
 func (b *Bot) sendDigests(ctx context.Context, now time.Time) {
-	p, due := digestDue(now, *b.cfg.DigestAt)
-	if !due {
-		return
+	if at := b.cfg.DigestAt; at != nil {
+		if p, due := digestDue(now, *at); due {
+			b.deliverDigests(ctx, digestRun{name: "digest", kind: store.MonthDigest, key: p.slug, p: p,
+				text: func(ctx context.Context, userID int64) (string, int, error) {
+					return b.monthDigest(ctx, userID, p, now)
+				}})
+		}
 	}
+	if at := b.cfg.WeeklyDigestAt; at != nil {
+		if p, due := weeklyDue(now, *at); due {
+			b.deliverDigests(ctx, digestRun{name: "weekly digest", kind: store.WeekDigest, key: p.from.Format("2006-01-02"), p: p,
+				text: func(ctx context.Context, userID int64) (string, int, error) { return b.weekDigest(ctx, userID, p) }})
+		}
+	}
+}
+
+func (b *Bot) deliverDigests(ctx context.Context, run digestRun) {
 	users, err := b.store.Users(ctx)
 	if err != nil {
-		log.Printf("digest: listing the users: %v", err)
+		log.Printf("%s: listing the users: %v", run.name, err)
 		return
 	}
 	for _, u := range users {
 		if !b.cfg.AllowedUsers[u.TelegramID] {
 			continue
 		}
-		if sent, err := b.store.DigestSent(ctx, u.ID, p.slug); err != nil || sent {
+		if sent, err := b.store.DigestSent(ctx, u.ID, run.kind, run.key); err != nil || sent {
 			if err != nil {
-				log.Printf("digest: user %d, %s: %v", u.ID, p.slug, err)
+				log.Printf("%s: user %d, %s: %v", run.name, u.ID, run.key, err)
 			}
 			continue
 		}
 
-		text, count, err := b.monthDigest(ctx, u.ID, p, now)
+		text, count, err := run.text(ctx, u.ID)
 		if err != nil {
-			log.Printf("digest: user %d, %s: %v", u.ID, p.slug, err)
+			log.Printf("%s: user %d, %s: %v", run.name, u.ID, run.key, err)
 			continue
 		}
 		outcome := "nothing to send, no expenses"
@@ -79,18 +119,18 @@ func (b *Bot) sendDigests(ctx context.Context, now time.Time) {
 			case errors.Is(err, bot.ErrorForbidden):
 				outcome = "not delivered, the user blocked the bot"
 			case err != nil:
-				log.Printf("digest: user %d, %s: sending it: %v", u.ID, p.slug, err)
+				log.Printf("%s: user %d, %s: sending it: %v", run.name, u.ID, run.key, err)
 				continue
 			default:
 				outcome = fmt.Sprintf("sent, %d expenses", count)
-				b.digestChart(ctx, u, p)
+				b.digestChart(ctx, u, run.p)
 			}
 		}
-		if err := b.store.MarkDigestSent(ctx, u.ID, p.slug); err != nil {
-			log.Printf("digest: user %d, %s: recording it: %v", u.ID, p.slug, err)
+		if err := b.store.MarkDigestSent(ctx, u.ID, run.kind, run.key); err != nil {
+			log.Printf("%s: user %d, %s: recording it: %v", run.name, u.ID, run.key, err)
 			continue
 		}
-		log.Printf("digest: user %d, %s: %s", u.ID, p.slug, outcome)
+		log.Printf("%s: user %d, %s: %s", run.name, u.ID, run.key, outcome)
 	}
 }
 
@@ -115,18 +155,26 @@ func (b *Bot) digestCommand(ctx context.Context, userID int64, arg string, now t
 
 func (b *Bot) monthDigest(ctx context.Context, userID int64, p period, now time.Time) (string, int, error) {
 	prevFirst := p.from.AddDate(0, -1, 0)
-	prev := monthPeriod(prevFirst)
-	title := "Resumo de " + strings.ToLower(p.title[:1]) + p.title[1:]
-	against := "em " + monthNames[prevFirst.Month()-1]
-	days := int(p.to.Sub(p.from).Hours()/24 + 0.5)
+	span := digestSpan{cur: p, prev: monthPeriod(prevFirst), title: "Resumo de " + strings.ToLower(p.title[:1]) + p.title[1:],
+		against: "em " + monthNames[prevFirst.Month()-1], days: int(p.to.Sub(p.from).Hours()/24 + 0.5)}
 	if today := startOfDay(now); today.Before(p.to) && !today.Before(p.from) {
-		days = int(today.Sub(p.from).Hours()/24+0.5) + 1
-		p.to = today.AddDate(0, 0, 1)
-		prev.to = minTime(prevFirst.AddDate(0, 0, days), prev.to)
-		title = p.title + ", até o dia " + fmt.Sprint(today.Day())
-		against = "no mesmo período de " + monthNames[prevFirst.Month()-1]
+		span.days = int(today.Sub(p.from).Hours()/24+0.5) + 1
+		span.cur.to = today.AddDate(0, 0, 1)
+		span.prev.to = minTime(prevFirst.AddDate(0, 0, span.days), span.prev.to)
+		span.title = p.title + ", até o dia " + fmt.Sprint(today.Day())
+		span.against = "no mesmo período de " + monthNames[prevFirst.Month()-1]
 	}
+	return b.digest(ctx, userID, span)
+}
 
+func (b *Bot) weekDigest(ctx context.Context, userID int64, p period) (string, int, error) {
+	return b.digest(ctx, userID, digestSpan{cur: p, prev: period{from: p.from.AddDate(0, 0, -7), to: p.from},
+		title:   "Resumo da semana de " + p.from.Format("02/01") + " a " + p.to.AddDate(0, 0, -1).Format("02/01"),
+		against: "na semana anterior", days: 7})
+}
+
+func (b *Bot) digest(ctx context.Context, userID int64, span digestSpan) (string, int, error) {
+	p, prev, title, against, days := span.cur, span.prev, span.title, span.against, span.days
 	cats, err := b.store.Totals(ctx, userID, store.Filter{From: p.from, To: p.to}, "category")
 	if err != nil {
 		return "", 0, err

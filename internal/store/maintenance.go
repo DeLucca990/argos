@@ -105,17 +105,25 @@ func backupTime(file string, loc *time.Location) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (s *Store) DigestSent(ctx context.Context, userID int64, month string) (bool, error) {
+type DigestKind string
+
+const (
+	MonthDigest DigestKind = "month"
+	WeekDigest  DigestKind = "week"
+)
+
+func (s *Store) DigestSent(ctx context.Context, userID int64, kind DigestKind, period string) (bool, error) {
 	var one int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM digests WHERE user_id = ? AND month = ?`, userID, month).Scan(&one)
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM digests WHERE user_id = ? AND kind = ? AND period = ?`,
+		userID, kind, period).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	return err == nil, err
 }
 
-func (s *Store) MarkDigestSent(ctx context.Context, userID int64, month string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO digests (user_id, month, sent_at) VALUES (?, ?, ?)
-		ON CONFLICT (user_id, month) DO NOTHING`, userID, month, s.timestamp())
+func (s *Store) MarkDigestSent(ctx context.Context, userID int64, kind DigestKind, period string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO digests (user_id, kind, period, sent_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT (user_id, kind, period) DO NOTHING`, userID, kind, period, s.timestamp())
 	return err
 }

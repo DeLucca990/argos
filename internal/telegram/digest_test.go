@@ -128,7 +128,7 @@ func TestSendDigests(t *testing.T) {
 
 	fail = errors.New("telegram is down")
 	b.sendDigests(ctx, at("2026-10-01 09:10"))
-	if done, _ := b.store.DigestSent(ctx, user.ID, "2026-09"); done {
+	if done, _ := b.store.DigestSent(ctx, user.ID, store.MonthDigest, "2026-09"); done {
 		t.Error("a digest that failed to send was recorded as sent")
 	}
 
@@ -138,18 +138,100 @@ func TestSendDigests(t *testing.T) {
 	if len(sent) != 1 || sent[0] != user.TelegramID {
 		t.Errorf("sent to %v, want only %d, once", sent, user.TelegramID)
 	}
-	if done, _ := b.store.DigestSent(ctx, quiet.ID, "2026-09"); !done {
+	if done, _ := b.store.DigestSent(ctx, quiet.ID, store.MonthDigest, "2026-09"); !done {
 		t.Error("a user with nothing to report should be marked done, not asked again")
 	}
-	if done, _ := b.store.DigestSent(ctx, 2, "2026-09"); done {
+	if done, _ := b.store.DigestSent(ctx, 2, store.MonthDigest, "2026-09"); done {
 		t.Error("a user outside the allowlist got a digest recorded")
 	}
 
 	b.sendDigests(ctx, at("2026-11-01 08:00"))
 	fail = bot.ErrorForbidden
 	b.sendDigests(ctx, at("2026-11-01 09:00"))
-	if done, _ := b.store.DigestSent(ctx, user.ID, "2026-10"); !done {
+	if done, _ := b.store.DigestSent(ctx, user.ID, store.MonthDigest, "2026-10"); !done {
 		t.Error("a user who blocked the bot is asked every ten minutes for a week")
+	}
+}
+
+func TestWeeklyDue(t *testing.T) {
+	eight := DailyAt{Hour: 20}
+	for now, want := range map[string]string{
+		"2026-10-11 19:59": "",
+		"2026-10-11 20:00": "Semana de 05/10 a 11/10",
+		"2026-10-11 23:30": "Semana de 05/10 a 11/10",
+		"2026-10-12 08:00": "Semana de 05/10 a 11/10",
+		"2026-10-13 19:59": "Semana de 05/10 a 11/10",
+		"2026-10-13 20:00": "",
+		"2026-10-16 12:00": "",
+		"2026-11-01 20:00": "Semana de 26/10 a 01/11",
+	} {
+		p, due := weeklyDue(at(now), eight)
+		if got := map[bool]string{true: p.title, false: ""}[due]; got != want {
+			t.Errorf("at %s: %q, want %q", now, got, want)
+		}
+	}
+}
+
+func TestWeekDigest(t *testing.T) {
+	b, user := testBot(t, answering(pharmacy()))
+	seedMonths(t, b, user)
+
+	p, _ := weeklyDue(at("2026-10-11 20:00"), DailyAt{Hour: 20})
+	text, count, err := b.weekDigest(ctx, user.ID, p)
+	if err != nil || count != 2 {
+		t.Fatalf("%d expenses, %v", count, err)
+	}
+	for _, want := range []string{
+		"📅 <b>Resumo da semana de 05/10 a 11/10</b>",
+		"💰 <b>R$ 250,00</b> em 2 gastos · média de R$ 35,71 por dia",
+		"↗️ R$ 130,00 a mais que na semana anterior (+108%)",
+		"⛽ Combustível — R$ 200,00 (80%) · novo",
+		"🛒 Mercado — R$ 50,00 (20%) · ↘️ −R$ 70,00",
+		"• 05/10 ⛽ Posto Shell — R$ 200,00\n• 10/10 🛒 OXXO — R$ 50,00",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the weekly digest lacks %q:\n%s", want, text)
+		}
+	}
+
+	empty, _ := weeklyDue(at("2026-10-18 20:00"), DailyAt{Hour: 20})
+	if text, count, _ := b.weekDigest(ctx, user.ID, empty); count != 0 || !strings.Contains(text, "Nenhum gasto") {
+		t.Errorf("an empty week: %q", text)
+	}
+}
+
+func TestSendWeeklyDigests(t *testing.T) {
+	b, user := testBot(t, answering(pharmacy()))
+	seedMonths(t, b, user)
+	b.cfg.AllowedUsers = map[int64]bool{user.TelegramID: true}
+	b.cfg.WeeklyDigestAt = &DailyAt{Hour: 20}
+	var texts, pictures []string
+	b.notify = func(_ context.Context, _ int64, text string) error {
+		texts = append(texts, text)
+		return nil
+	}
+	b.sendPhoto = func(_ context.Context, _ int64, p picture) error {
+		pictures = append(pictures, p.caption)
+		return nil
+	}
+
+	b.sendDigests(ctx, at("2026-10-11 19:50"))
+	b.sendDigests(ctx, at("2026-10-11 20:00"))
+	b.sendDigests(ctx, at("2026-10-12 09:00"))
+	if len(texts) != 1 || !strings.Contains(texts[0], "Resumo da semana de 05/10 a 11/10") ||
+		len(pictures) != 1 || pictures[0] != "📊 Ritmo da semana de 05/10 a 11/10" {
+		t.Errorf("sent %q with the charts %q", texts, pictures)
+	}
+	if done, _ := b.store.DigestSent(ctx, user.ID, store.WeekDigest, "2026-10-05"); !done {
+		t.Error("the week was not recorded as sent")
+	}
+	if done, _ := b.store.DigestSent(ctx, user.ID, store.MonthDigest, "2026-09"); done {
+		t.Error("the monthly digest went out while it is off")
+	}
+
+	b.sendDigests(ctx, at("2026-10-18 20:00"))
+	if done, _ := b.store.DigestSent(ctx, user.ID, store.WeekDigest, "2026-10-12"); !done || len(texts) != 1 {
+		t.Errorf("a week with nothing in it: recorded %v, %d sent", done, len(texts))
 	}
 }
 
