@@ -506,8 +506,8 @@ receipts, so one starting with `=`, `+`, `-` or `@` is prefixed with `'`: a plan
 
 ### The monthly digest
 
-On the 1st, at `ARGOS_DIGEST_AT` (09:00 unless set; `off` for never), everyone in the allowlist
-gets the month that just closed — their own expenses only:
+On the 1st, at `ARGOS_MONTHLY_DIGEST_AT` (09:00 unless set; `off` for never), everyone in the
+allowlist gets the month that just closed — their own expenses only:
 
 ```
 📅 Resumo de setembro de 2026
@@ -668,7 +668,7 @@ reads ambiguous follow-ups less well.
 | `ARGOS_DAILY_BUDGET_USD` | — | the most a day of model calls may cost before reading pauses until midnight; `1.50` or `1,50` |
 | `ARGOS_BACKUP_KEEP` | `14` | how many backups to keep in `/data/backups`; `0` turns them off |
 | `ARGOS_BACKUP_EVERY` | `1d` | how often to write one: whole minutes, at least `1m` — `30m`, `6h`, `1d`, `7d` |
-| `ARGOS_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
+| `ARGOS_MONTHLY_DIGEST_AT` | `09:00` | when the monthly digest goes out on the 1st, local time; `off` for never |
 | `ARGOS_WEEKLY_DIGEST_AT` | `20:00` | when the weekly digest goes out on Sundays, local time; `off` for never |
 | `ARGOS_DELETE_RECEIPTS` | `false` | `true` keeps no receipt files: each is read from memory, and the ones kept before are deleted at startup |
 | `PLUGGY_CLIENT_ID` / `PLUGGY_CLIENT_SECRET` | — | a Pluggy application, to [import from banks](#importing-from-the-bank), for everyone without one of their own; neither for receipts only |

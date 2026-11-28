@@ -66,7 +66,7 @@ func TestTheDigestComesWithItsChart(t *testing.T) {
 	b, user := testBot(t, answering(pharmacy()))
 	seedMonths(t, b, user)
 	b.cfg.AllowedUsers = map[int64]bool{user.TelegramID: true}
-	b.cfg.DigestAt = &DailyAt{Hour: 9}
+	b.cfg.MonthlyDigestAt = &DailyAt{Hour: 9}
 	var texts, pictures []string
 	b.notify = func(_ context.Context, _ int64, text string) error {
 		texts = append(texts, text)

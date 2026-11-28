@@ -41,7 +41,7 @@ func TestRememberSavesTheSender(t *testing.T) {
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
 	for _, k := range []string{TokenEnv, AllowedUsersEnv, DataDirEnv, ModelEnv, EffortEnv, anthropicKeyEnv, anthropicTokenEnv,
-		PluggyIDEnv, PluggySecretEnv, BackupEveryEnv, BankEveryEnv, DigestAtEnv, WeeklyDigestAtEnv} {
+		PluggyIDEnv, PluggySecretEnv, BackupEveryEnv, BankEveryEnv, MonthlyDigestAtEnv, WeeklyDigestAtEnv} {
 		t.Setenv(k, kv[k])
 	}
 }
@@ -187,14 +187,14 @@ func TestConfigDigestTimes(t *testing.T) {
 	base := map[string]string{TokenEnv: "123:abc", AllowedUsersEnv: "42", DataDirEnv: t.TempDir(), anthropicKeyEnv: "x"}
 	setEnv(t, base)
 	cfg, err := LoadConfig()
-	if err != nil || cfg.DigestAt == nil || *cfg.DigestAt != (DailyAt{Hour: 9}) || cfg.WeeklyDigestAt == nil || *cfg.WeeklyDigestAt != (DailyAt{Hour: 20}) {
-		t.Fatalf("defaults: %v and %v, %v", cfg.DigestAt, cfg.WeeklyDigestAt, err)
+	if err != nil || cfg.MonthlyDigestAt == nil || *cfg.MonthlyDigestAt != (DailyAt{Hour: 9}) || cfg.WeeklyDigestAt == nil || *cfg.WeeklyDigestAt != (DailyAt{Hour: 20}) {
+		t.Fatalf("defaults: %v and %v, %v", cfg.MonthlyDigestAt, cfg.WeeklyDigestAt, err)
 	}
 
-	base[DigestAtEnv], base[WeeklyDigestAtEnv] = "off", "21:30"
+	base[MonthlyDigestAtEnv], base[WeeklyDigestAtEnv] = "off", "21:30"
 	setEnv(t, base)
-	if cfg, err := LoadConfig(); err != nil || cfg.DigestAt != nil || cfg.WeeklyDigestAt == nil || *cfg.WeeklyDigestAt != (DailyAt{Hour: 21, Minute: 30}) {
-		t.Errorf("monthly off, weekly at 21:30: %v and %v, %v", cfg.DigestAt, cfg.WeeklyDigestAt, err)
+	if cfg, err := LoadConfig(); err != nil || cfg.MonthlyDigestAt != nil || cfg.WeeklyDigestAt == nil || *cfg.WeeklyDigestAt != (DailyAt{Hour: 21, Minute: 30}) {
+		t.Errorf("monthly off, weekly at 21:30: %v and %v, %v", cfg.MonthlyDigestAt, cfg.WeeklyDigestAt, err)
 	}
 	base[WeeklyDigestAtEnv] = "OFF"
 	setEnv(t, base)

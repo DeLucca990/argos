@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	digestCatchUpDays = 7
-	weeklyCatchUp     = 48 * time.Hour
-	digestTop         = 5
-	digestTick        = 10 * time.Minute
+	monthlyCatchUpDays = 7
+	weeklyCatchUp      = 48 * time.Hour
+	digestTop          = 5
+	digestTick         = 10 * time.Minute
 )
 
 type digestRun struct {
@@ -37,8 +37,8 @@ type digestSpan struct {
 	days           int
 }
 
-func digestDue(now time.Time, at DailyAt) (period, bool) {
-	if now.Day() > digestCatchUpDays {
+func monthlyDue(now time.Time, at DailyAt) (period, bool) {
+	if now.Day() > monthlyCatchUpDays {
 		return period{}, false
 	}
 	if now.Day() == 1 && now.Hour()*60+now.Minute() < at.Hour*60+at.Minute {
@@ -74,8 +74,8 @@ func (b *Bot) runDigests(ctx context.Context) {
 }
 
 func (b *Bot) sendDigests(ctx context.Context, now time.Time) {
-	if at := b.cfg.DigestAt; at != nil {
-		if p, due := digestDue(now, *at); due {
+	if at := b.cfg.MonthlyDigestAt; at != nil {
+		if p, due := monthlyDue(now, *at); due {
 			b.deliverDigests(ctx, digestRun{name: "digest", kind: store.MonthDigest, key: p.slug, p: p,
 				text: func(ctx context.Context, userID int64) (string, int, error) {
 					return b.monthDigest(ctx, userID, p, now)

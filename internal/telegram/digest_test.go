@@ -55,7 +55,7 @@ func TestDigestDue(t *testing.T) {
 		"2026-11-08 09:00": "",
 		"2027-01-01 10:00": "2026-12",
 	} {
-		p, due := digestDue(at(now), nine)
+		p, due := monthlyDue(at(now), nine)
 		if got := map[bool]string{true: p.slug, false: ""}[due]; got != want {
 			t.Errorf("at %s: %q, want %q", now, got, want)
 		}
@@ -111,7 +111,7 @@ func TestSendDigests(t *testing.T) {
 	seedMonths(t, b, user)
 	quiet, _ := b.store.SaveUser(ctx, store.User{TelegramID: 5555})
 	b.cfg.AllowedUsers = map[int64]bool{user.TelegramID: true, quiet.TelegramID: true}
-	b.cfg.DigestAt = &DailyAt{Hour: 9}
+	b.cfg.MonthlyDigestAt = &DailyAt{Hour: 9}
 
 	var sent []int64
 	var fail error
